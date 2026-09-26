@@ -1,0 +1,38 @@
+# Rust
+/target/
+**/target/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data
+data/
+reports/
+
+# Temporary files
+*.tmp
+*.bak
+
+# Large/private EEG data
+*.edf
+*.bdf
+*.mat
+
+# Local model files
+models/**/*.bpk
+models/**/*.onnx
+models/**/*.pt
+models/**/*.pth
