@@ -31,6 +31,11 @@ reports/
 *.bdf
 *.mat
 
+# Tiny synthetic P3 golden fixtures contain no identifying information.
+!/crates/eeg-io/tests/data/
+!/crates/eeg-io/tests/data/*.edf
+!/crates/eeg-io/tests/data/*.mat
+
 # Local model files
 models/**/*.bpk
 models/**/*.onnx

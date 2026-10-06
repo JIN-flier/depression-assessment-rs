@@ -4,3 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+domain = { path = "../domain" }
+csv = "1.4.0"
+matfile = "0.5.0"
+flate2 = "1.1"
+thiserror = "2.0.21"
+
+[dev-dependencies]
+chrono = "0.4.45"
+storage = { path = "../storage" }
+tempfile = "3.24.0"
