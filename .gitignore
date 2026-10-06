@@ -36,6 +36,10 @@ reports/
 !/crates/eeg-io/tests/data/*.edf
 !/crates/eeg-io/tests/data/*.mat
 
+# P5 analytic quality references contain only synthetic parameters/results.
+!/crates/eeg-quality/tests/data/
+!/crates/eeg-quality/tests/data/*.json
+
 # Local model files
 models/**/*.bpk
 models/**/*.onnx
