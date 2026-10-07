@@ -1,13 +1,336 @@
+import { CheckBox, ComboBox, LineEdit, ScrollView, TabWidget, TextEdit } from "std-widgets.slint";
+
+import { Theme, Card, SectionTitle, HintText, ActionButton } from "theme.slint";
+
+import { ChannelOption, ChannelPlot, MapLabel, TraceViewport, TopomapViewport } from "plots.slint";
+export { ChannelOption, ChannelPlot, MapLabel }
+
 export component AppWindow inherits Window {
-    width: 900px;
-    height: 600px;
+    title: "EEG 工作台";
+    default-font-size: 14px;
+    preferred-width: 1280px; preferred-height: 900px;
+    min-width: 1040px; min-height: 720px;
+    background: Theme.canvas;
+    in property <bool> busy: false;
+    in property <bool> dialog-open: false;
+    private property <bool> interaction-blocked: root.busy || root.dialog-open;
+    in property <bool> file-selected: false;
+    in property <string> file-label: "尚未选择文件";
+    in property <string> recording-overview: "尚未加载录制";
+    in-out property <bool> details-expanded: false;
+    in property <bool> project-open: false;
+    in property <bool> subject-selected: false;
+    in property <bool> recording-loaded: false;
+    in property <bool> analysis-ready: false;
+    in property <bool> processed-saved: false;
+    in property <string> status: "打开项目目录，开始 EEG 工作流";
+    in property <string> error-message;
+    in property <string> recording-summary;
+    in property <string> subject-summary;
+    in property <string> quality-summary;
+    in property <string> band-summary;
+    in property <string> result-summary;
+    in property <string> plot-warning;
+    in property <[ChannelPlot]> waveform-rows;
+    in property <[ChannelPlot]> psd-rows;
+    in property <[ChannelOption]> channel-options;
+    in property <int> selected-channel-count;
+    in-out property <length> waveform-scroll-y;
+    in-out property <length> psd-scroll-y;
+    in property <[MapLabel]> topomap-labels;
+    in property <string> topomap-upper-label;
+    in property <string> topomap-lower-label;
+    in property <string> topomap-unit;
+    in property <string> topomap-caption;
+    in property <image> topomap-image;
+    in property <bool> has-psd: false;
+    in property <bool> has-topomap: false;
+    in property <[string]> subject-items;
+    in property <[string]> recording-items;
+    in-out property <int> subject-index: -1;
+    in-out property <int> recording-index: -1;
+    in-out property <int> page: 0;
+    in property <string> project-path;
+    in-out property <string> subject-age;
+    in-out property <int> sex-index: 0;
+    in-out property <string> subject-notes;
+    in-out property <bool> confirm-delete: false;
+    in property <string> file-path;
+    in-out property <int> format-index: 0;
+    in-out property <string> sampling-rate: "250";
+    in-out property <string> source-unit: "uV";
+    in-out property <bool> csv-headers: true;
+    in-out property <string> channel-labels;
+    in-out property <string> mat-variable: "data";
+    in-out property <string> mat-rate-variable;
+    in-out property <bool> mat-transposed: false;
+    in-out property <string> recorded-at;
+    in-out property <string> device;
+    in-out property <string> electrode-system: "10-20";
+    in-out property <string> recording-condition: "eyes_closed";
+    in-out property <string> recording-notes;
+    in-out property <bool> remove-dc: true;
+    in-out property <bool> bandpass: true;
+    in-out property <string> low-hz: "0.5";
+    in-out property <string> high-hz: "30";
+    in-out property <bool> notch: true;
+    in-out property <string> notch-hz: "50";
+    in-out property <bool> resample: false;
+    in-out property <string> target-hz: "250";
+    in-out property <bool> exclude-bad: false;
+    in-out property <string> start-seconds: "0";
+    in-out property <string> window-seconds: "5";
+    in-out property <string> amplitude-uv: "100";
+    in-out property <bool> show-processed: false;
+    in-out property <int> band-index: 2;
+    in-out property <int> plot-index: 0;
+    in-out property <bool> relative-power: true;
+    in-out property <bool> quality-line-enabled: true;
+    in-out property <string> quality-line-hz: "50";
+    callback choose-project();
+    callback choose-eeg();
+    callback plot-geometry(int, float, float);
+    callback toggle-channel(int, bool);
+    callback select-all-channels(bool);
+    callback action(int);
+    callback select-subject(int);
+    callback select-recording(int);
 
-    title: "Depression Assessment";
-
-    Text {
-        text: "Depression Assessment Environment OK";
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        font-size: 24px;
+    VerticalLayout {
+        padding: Theme.space-large; spacing: Theme.space-medium;
+        HorizontalLayout {
+            spacing: 24px;
+            VerticalLayout {
+                spacing: 4px;
+                Text { text: "EEG 工作台"; font-size: 24px; font-weight: 700; color: Theme.ink; }
+                HintText { text: "数据管理与信号分析"; }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            ActionButton { text: "受试者"; primary: root.page == 0; clicked => { root.page = 0; } }
+            ActionButton { text: "EEG 分析"; primary: root.page == 1; clicked => { root.page = 1; } }
+            ActionButton { text: "分析结果"; primary: root.page == 2; clicked => { root.page = 2; } }
+            ActionButton { text: "设置"; primary: root.page == 3; clicked => { root.page = 3; } }
+        }
+        Card {
+            height: 64px;
+            HorizontalLayout {
+                padding: 16px; spacing: 16px;
+                Text { text: "项目"; color: Theme.ink; font-weight: 600; }
+                Text { text: root.project-path == "" ? "尚未打开项目" : root.project-path; color: Theme.muted; overflow: elide; horizontal-stretch: 1; }
+                ActionButton { text: root.project-open ? "切换项目" : "打开项目"; enabled: !root.interaction-blocked; clicked => { root.choose-project(); } }
+            }
+        }
+        HorizontalLayout {
+            Text { text: "受试者"; }
+            ComboBox { model: root.subject-items; current-index <=> root.subject-index; enabled: root.project-open && !root.interaction-blocked; selected(value) => { root.select-subject(self.current-index); } }
+            Text { text: "录制"; }
+            ComboBox { model: root.recording-items; current-index <=> root.recording-index; enabled: root.subject-selected && !root.interaction-blocked; selected(value) => { root.select-recording(self.current-index); } }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            Rectangle { width: 6px; height: 6px; border-radius: 3px; background: root.error-message != "" ? #b3261e : root.interaction-blocked ? Theme.accent : #448365; }
+            HintText { text: root.status; }
+        }
+        if root.error-message != "": Rectangle {
+            background: #fff4f3; border-radius: 6px;
+            VerticalLayout { padding: 12px; Text { text: root.error-message; color: #b3261e; wrap: word-wrap; } }
+        }
+        // 固定内容容器隔离条件页面的布局，导航和状态栏始终在容器外。
+        Rectangle {
+            vertical-stretch: 1;
+            if root.page == 0: Card {
+                VerticalLayout {
+                    padding: 24px; spacing: 16px;
+                    SectionTitle { text: "受试者管理"; }
+                    Text { text: root.subject-summary; wrap: word-wrap; }
+                    HorizontalLayout {
+                        alignment: start; spacing: 16px;
+                        Text { text: "年龄（可留空）"; }
+                        LineEdit { width: 160px; text <=> root.subject-age; enabled: !root.interaction-blocked; }
+                        Text { text: "性别"; }
+                        ComboBox { width: 180px; model: ["未知", "女", "男", "Intersex", "其他"]; current-index <=> root.sex-index; enabled: !root.interaction-blocked; }
+                    }
+                    Text { text: "备注"; }
+                    TextEdit { height: 144px; text <=> root.subject-notes; enabled: !root.interaction-blocked; }
+                    HorizontalLayout {
+                        alignment: start; spacing: 12px;
+                        ActionButton { text: "新建受试者"; primary: true; enabled: root.project-open && !root.interaction-blocked; clicked => { root.action(1); } }
+                        ActionButton { text: "保存修改"; enabled: root.subject-selected && !root.interaction-blocked; clicked => { root.action(2); } }
+                        Rectangle { horizontal-stretch: 1; }
+                        CheckBox { text: "确认删除所选条目"; checked <=> root.confirm-delete; enabled: !root.interaction-blocked; }
+                        ActionButton { text: "删除受试者"; enabled: root.subject-selected && root.confirm-delete && !root.interaction-blocked; clicked => { root.action(3); } }
+                    }
+                    HintText { text: "使用匿名 ID 管理受试者。选择录制后，可浏览数据并完成分析。"; }
+                    Rectangle { vertical-stretch: 1; }
+                }
+            }
+            if root.page == 1: HorizontalLayout {
+                spacing: 16px;
+                Card {
+                    width: 320px;
+                    ScrollView {
+                        content-width: self.visible-width;
+                        horizontal-scrollbar-policy: always-off;
+                        VerticalLayout {
+                            spacing: 12px; padding: 16px;
+                            SectionTitle { text: "导入 EEG"; }
+                            ActionButton { text: "选择 EEG 文件"; enabled: root.subject-selected && !root.interaction-blocked; clicked => { root.choose-eeg(); } }
+                            Rectangle {
+                                background: Theme.canvas; border-radius: 6px;
+                                VerticalLayout {
+                                    padding: 12px; spacing: 4px;
+                                    Text { text: root.file-label; color: Theme.ink; font-weight: 600; overflow: elide; }
+                                    HintText { text: root.file-selected ? root.file-path : "支持 EDF、CSV 和 MAT"; overflow: elide; wrap: no-wrap; }
+                                }
+                            }
+                            ComboBox { model: ["EDF", "CSV", "MAT"]; current-index <=> root.format-index; enabled: !root.interaction-blocked; }
+                            HintText { text: "CSV / MAT 的采样率与矩阵参数可在设置中调整。"; }
+                            ActionButton { text: "导入 EEG"; primary: true; enabled: root.file-selected && root.subject-selected && !root.interaction-blocked; clicked => { root.action(4); } }
+                            Rectangle { height: 1px; background: Theme.hairline; }
+                            SectionTitle { text: "当前录制"; }
+                            HintText { text: root.recording-overview; }
+                            CheckBox { text: "显示采集信息"; checked <=> root.details-expanded; }
+                            if root.details-expanded: HintText { text: root.recording-summary; }
+                            ActionButton { text: "评价原始信号质量"; enabled: root.recording-loaded && !root.interaction-blocked; clicked => { root.action(5); } }
+                            Rectangle { height: 1px; background: Theme.hairline; }
+                            SectionTitle { text: "预处理与特征"; }
+                            CheckBox { text: "去 DC"; checked <=> root.remove-dc; enabled: !root.interaction-blocked; }
+                            CheckBox { text: "带通（Hz）"; checked <=> root.bandpass; enabled: !root.interaction-blocked; }
+                            HorizontalLayout { LineEdit { text <=> root.low-hz; enabled: !root.interaction-blocked; } LineEdit { text <=> root.high-hz; enabled: !root.interaction-blocked; } }
+                            CheckBox { text: "陷波（Hz）"; checked <=> root.notch; enabled: !root.interaction-blocked; }
+                            LineEdit { text <=> root.notch-hz; enabled: !root.interaction-blocked; }
+                            CheckBox { text: "重采样（Hz）"; checked <=> root.resample; enabled: !root.interaction-blocked; }
+                            LineEdit { text <=> root.target-hz; enabled: !root.interaction-blocked; }
+                            CheckBox { text: "特征中排除原始质量判定的坏通道"; checked <=> root.exclude-bad; enabled: !root.interaction-blocked; }
+                            ActionButton { text: "运行完整分析"; primary: true; enabled: root.recording-loaded && !root.interaction-blocked; clicked => { root.action(6); } }
+                            ActionButton { text: root.processed-saved ? "处理后录制已保存" : "保存处理后录制"; enabled: root.analysis-ready && !root.processed-saved && !root.interaction-blocked; clicked => { root.action(8); } }
+                            CheckBox { text: "确认删除所选条目"; checked <=> root.confirm-delete; enabled: !root.interaction-blocked; }
+                            ActionButton { text: "删除当前录制"; enabled: root.recording-loaded && root.confirm-delete && !root.interaction-blocked; clicked => { root.action(9); } }
+                        }
+                    }
+                }
+                Card {
+                    VerticalLayout {
+                        padding: 16px; spacing: 12px;
+                        HorizontalLayout {
+                            Text { text: "通道 · " + root.selected-channel-count + "/" + root.channel-options.length; color: Theme.ink; font-weight: 600; }
+                            ActionButton { text: "全选"; enabled: root.recording-loaded && !root.interaction-blocked; clicked => { root.select-all-channels(true); } }
+                            ActionButton { text: "全不选"; enabled: root.recording-loaded && !root.interaction-blocked; clicked => { root.select-all-channels(false); } }
+                            CheckBox { text: "处理后"; checked <=> root.show-processed; enabled: root.analysis-ready && !root.interaction-blocked; }
+                        }
+                        // 所有 EEG 通道默认勾选。选择列表独立滚动，不挤压下方图表。
+                        ScrollView {
+                            height: 64px; vertical-stretch: 0;
+                            horizontal-scrollbar-policy: always-off;
+                            content-width: self.visible-width;
+                            content-height: max(self.visible-height, ceil(root.channel-options.length / 4) * 32px);
+                            for channel[index] in root.channel-options: CheckBox {
+                                x: mod(index, 4) * (parent.width - 16px) / 4;
+                                y: floor(index / 4) * 32px;
+                                width: (parent.width - 16px) / 4; height: 32px;
+                                text: channel.label; checked: channel.selected;
+                                enabled: !root.interaction-blocked;
+                                toggled => { root.toggle-channel(index, self.checked); }
+                            }
+                        }
+                        HorizontalLayout {
+                            Text { text: "起点 / 窗长（s）/ ±幅度（uV）"; }
+                            LineEdit { text <=> root.start-seconds; enabled: !root.interaction-blocked; }
+                            LineEdit { text <=> root.window-seconds; enabled: !root.interaction-blocked; }
+                            LineEdit { text <=> root.amplitude-uv; enabled: !root.interaction-blocked; }
+                            ActionButton { text: "更新显示"; enabled: root.recording-loaded && !root.interaction-blocked; clicked => { root.action(7); } }
+                        }
+                        HorizontalLayout {
+                            ActionButton { text: "上一窗"; enabled: root.recording-loaded && !root.interaction-blocked; clicked => { root.action(10); } }
+                            ActionButton { text: "下一窗"; enabled: root.recording-loaded && !root.interaction-blocked; clicked => { root.action(11); } }
+                            ActionButton { text: "放大时间"; enabled: root.recording-loaded && !root.interaction-blocked; clicked => { root.action(12); } }
+                            ActionButton { text: "缩小时间"; enabled: root.recording-loaded && !root.interaction-blocked; clicked => { root.action(13); } }
+                            ComboBox { model: ["Delta", "Theta", "Alpha", "Beta"]; current-index <=> root.band-index; enabled: !root.interaction-blocked; }
+                            CheckBox { text: "相对功率"; checked <=> root.relative-power; enabled: !root.interaction-blocked; }
+                        }
+                        TabWidget {
+                            current-index <=> root.plot-index;
+                            Tab { title: "EEG 波形";
+                                waveforms := TraceViewport {
+                                    rows: root.waveform-rows;
+                                    raster-size-changed(w, h) => { root.plot-geometry(0, w, h); }
+                                    scroll-y <=> root.waveform-scroll-y;
+                                    empty-message: root.recording-loaded ? "请选择要显示的通道" : "导入或加载录制后显示波形";
+                                }
+                            }
+                            Tab { title: "PSD";
+                                TraceViewport {
+                                    rows: root.psd-rows;
+                                    raster-size-changed(w, h) => { root.plot-geometry(1, w, h); }
+                                    scroll-y <=> root.psd-scroll-y;
+                                    empty-message: root.analysis-ready ? "所选通道没有可用 PSD" : "完成分析后显示 Welch PSD（dB，相对于 1 uV²/Hz）";
+                                }
+                            }
+                            Tab { title: "Topomap";
+                                VerticalLayout {
+                                    if !root.has-topomap: Text { text: "当前无可用地形图，请查看下方提示。"; }
+                                    HintText { text: root.topomap-caption; }
+                                    TopomapViewport {
+                                        pixels: root.topomap-image; labels: root.topomap-labels;
+                                        upper-label: root.topomap-upper-label; lower-label: root.topomap-lower-label;
+                                        unit: root.topomap-unit;
+                                        raster-size-changed(w, h) => { root.plot-geometry(2, w, h); }
+                                    }
+                                }
+                            }
+                            Tab { title: "质量"; TextEdit { text: root.quality-summary; read-only: true; } }
+                            Tab { title: "频段功率"; TextEdit { text: root.band-summary; read-only: true; } }
+                        }
+                        HintText { text: "同屏 8 个通道 · 滚轮查看其余通道"; }
+                        HintText { text: root.plot-warning; }
+                    }
+                }
+            }
+            if root.page == 2: Card {
+                VerticalLayout {
+                    padding: 24px; spacing: 16px;
+                    SectionTitle { text: "分析结果"; }
+                    TextEdit { text: root.result-summary; read-only: true; }
+                    HintText { text: "当前显示信号质量、特征与处理参数。分析结果保存在当前会话，处理后录制可单独保存。"; }
+                }
+            }
+            if root.page == 3: Card {
+                ScrollView {
+                    content-width: self.visible-width;
+                    horizontal-scrollbar-policy: always-off;
+                    VerticalLayout {
+                        padding: 24px; spacing: 16px;
+                        SectionTitle { text: "导入参数与采集信息"; }
+                        HorizontalLayout {
+                            Text { text: "CSV / MAT 采样率（Hz）"; } LineEdit { text <=> root.sampling-rate; enabled: !root.interaction-blocked; }
+                            Text { text: "源振幅单位"; } LineEdit { text <=> root.source-unit; enabled: !root.interaction-blocked; }
+                        }
+                        CheckBox { text: "CSV 第一行是通道表头"; checked <=> root.csv-headers; enabled: !root.interaction-blocked; }
+                        Text { text: "通道标签（逗号分隔；MAT / 无表头 CSV 必填，有表头 CSV 可留空）"; }
+                        LineEdit { text <=> root.channel-labels; placeholder-text: "Fp1,Fp2,Fz,Cz,O1,O2"; enabled: !root.interaction-blocked; }
+                        HorizontalLayout {
+                            Text { text: "MAT 数据变量"; } LineEdit { text <=> root.mat-variable; enabled: !root.interaction-blocked; }
+                            Text { text: "MAT 采样率变量（可留空）"; } LineEdit { text <=> root.mat-rate-variable; enabled: !root.interaction-blocked; }
+                        }
+                        CheckBox { text: "MAT 矩阵是 samples × channels（默认 channels × samples）"; checked <=> root.mat-transposed; enabled: !root.interaction-blocked; }
+                        Text { text: "采集时间（RFC3339，含时区；留空保留文件元数据）"; }
+                        LineEdit { text <=> root.recorded-at; placeholder-text: "2026-10-07T17:00:00+08:00"; enabled: !root.interaction-blocked; }
+                        HorizontalLayout {
+                            Text { text: "设备"; } LineEdit { text <=> root.device; enabled: !root.interaction-blocked; }
+                            Text { text: "电极系统"; } LineEdit { text <=> root.electrode-system; enabled: !root.interaction-blocked; }
+                        }
+                        Text { text: "采集状态（如 eyes_closed / eyes_open）"; }
+                        LineEdit { text <=> root.recording-condition; enabled: !root.interaction-blocked; }
+                        Text { text: "录制备注"; }
+                        TextEdit { text <=> root.recording-notes; height: 110px; enabled: !root.interaction-blocked; }
+                        HorizontalLayout {
+                            CheckBox { text: "质量评价检查工频（Hz）"; checked <=> root.quality-line-enabled; enabled: !root.interaction-blocked; }
+                            LineEdit { text <=> root.quality-line-hz; enabled: root.quality-line-enabled && !root.interaction-blocked; }
+                        }
+                        Text { text: "分析采用 2 秒 Hann 窗、50% 重叠 Welch PSD。默认频段为 0.5–30 Hz；信号时长和 Nyquist 不满足要求时会显示具体错误。"; wrap: word-wrap; color: Theme.muted; }
+                    }
+                }
+            }
+        }
     }
 }

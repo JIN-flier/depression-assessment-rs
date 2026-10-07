@@ -21,6 +21,8 @@ logs/
 # Runtime data
 data/
 reports/
+/projects/
+projects/
 
 # Temporary files
 *.tmp

@@ -1,0 +1,17 @@
+[package]
+name = "eeg-visualization"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+domain = { path = "../domain" }
+serde = { version = "1.0.229", features = ["derive"] }
+thiserror = "2.0.21"
+
+[dev-dependencies]
+chrono = "0.4.45"
+eeg-features = { path = "../eeg-features" }
+eeg-io = { path = "../eeg-io" }
+eeg-signal = { path = "../eeg-signal" }
+eeg-quality = { path = "../eeg-quality" }
+serde_json = { version = "1.0.151", features = ["float_roundtrip"] }

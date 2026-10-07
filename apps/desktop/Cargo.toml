@@ -6,6 +6,7 @@ build = "build.rs"
 
 [dependencies]
 slint = "=1.18.1"
+eeg-application = { path = "../../crates/eeg-application" }
 
 [build-dependencies]
 slint-build = "=1.18.1"

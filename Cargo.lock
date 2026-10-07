@@ -938,6 +938,7 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 name = "depression-desktop"
 version = "0.1.0"
 dependencies = [
+ "eeg-application",
  "slint",
  "slint-build",
 ]
@@ -1080,6 +1081,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edf234dd1594d6dd434a8fb8cada51ddbbc593e40e4a01556a0b31c62da2775b"
 
 [[package]]
+name = "eeg-application"
+version = "0.1.0"
+dependencies = [
+ "domain",
+ "eeg-features",
+ "eeg-io",
+ "eeg-quality",
+ "eeg-signal",
+ "eeg-visualization",
+ "storage",
+]
+
+[[package]]
 name = "eeg-features"
 version = "0.1.0"
 dependencies = [
@@ -1133,6 +1147,21 @@ dependencies = [
  "serde_json",
  "storage",
  "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "eeg-visualization"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "domain",
+ "eeg-features",
+ "eeg-io",
+ "eeg-quality",
+ "eeg-signal",
+ "serde",
+ "serde_json",
  "thiserror 2.0.21",
 ]
 

@@ -1,0 +1,130 @@
+// 数据模型只包含通道标签、选择状态或 Rust 生成的像素图像。
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export struct MapLabel { label: string, x: float, y: float }
+
+export struct ChannelOption { label: string, selected: bool }
+export struct ChannelPlot {
+    label: string, pixels: image,
+    x-start: string, x-mid: string, x-end: string,
+    y-upper: string, y-lower: string
+}
+
+// 8 是可视区中的通道槽位数量，不截断数据模型。其余行保留原尺寸，
+// 由 ScrollView 的系统滚轮/滚动条查看，避免把几十个通道缩成一张小图。
+export component TraceViewport inherits Rectangle {
+    in property <[ChannelPlot]> rows;
+    in property <string> empty-message;
+    callback raster-size-changed(float, float);
+    private property <float> raster-width: max(1px, scroller.visible-width - 142px) / 1px;
+    private property <float> raster-height: max(1px, scroller.visible-height / 8 - 16px) / 1px;
+    changed raster-width => { root.raster-size-changed(root.raster-width, root.raster-height); }
+    changed raster-height => { root.raster-size-changed(root.raster-width, root.raster-height); }
+    // changed 不通知初始化值；下一轮事件循环补报初始布局，之后只监听变化。
+    Timer {
+        interval: 1ms;
+        triggered => { root.raster-size-changed(root.raster-width, root.raster-height); self.running = false; }
+    }
+    in-out property <length> scroll-y <=> scroller.content-y;
+    out property <length> row-height: scroller.visible-height / 8;
+    out property <length> view-height <=> scroller.visible-height;
+    background: Theme.surface;
+    min-height: 160px;
+    vertical-stretch: 1;
+    horizontal-stretch: 1;
+    scroller := ScrollView {
+        width: parent.width; height: parent.height;
+        horizontal-scrollbar-policy: always-off;
+        content-width: self.visible-width;
+        content-height: max(self.visible-height, root.rows.length * root.row-height);
+        for row[index] in root.rows: Rectangle {
+            y: index * root.row-height;
+            width: scroller.visible-width;
+            height: root.row-height;
+            Text {
+                text: row.label; color: Theme.ink;
+                x: 4px; width: 52px; height: parent.height;
+                font-size: 12px; font-weight: 600;
+                vertical-alignment: center; overflow: elide;
+            }
+            Text {
+                x: 54px; y: 0px; width: 68px; height: 12px;
+                text: row.y-upper; color: Theme.muted; font-size: 9px;
+                overflow: elide;
+            }
+            Text {
+                x: 54px; y: parent.height - 12px; width: 68px; height: 12px;
+                text: row.y-lower; color: Theme.muted; font-size: 9px;
+                overflow: elide;
+            }
+            Image {
+                x: 126px; width: max(0px, parent.width - 142px);
+                y: 2px; height: max(0px, parent.height - 16px);
+                source: row.pixels;
+                // 每个像素缓冲是一条曲线；只缩放这一行，绝不缩小整个通道列表。
+                image-fit: fill;
+                min-width: 0px; min-height: 0px;
+            }
+            Text {
+                x: 126px; y: parent.height - 13px; width: 100px; height: 12px;
+                text: row.x-start; color: Theme.muted; font-size: 9px;
+            }
+            Text {
+                x: 126px + max(0px, parent.width - 142px) / 2 - 50px;
+                y: parent.height - 13px; width: 100px; height: 12px;
+                text: row.x-mid; color: Theme.muted; font-size: 9px; horizontal-alignment: center;
+            }
+            Text {
+                x: parent.width - 116px; y: parent.height - 13px; width: 100px; height: 12px;
+                text: row.x-end; color: Theme.muted; font-size: 9px; horizontal-alignment: right;
+            }
+            Rectangle { y: parent.height - 1px; height: 1px; width: parent.width; background: Theme.hairline; }
+        }
+    }
+    if root.rows.length == 0: Text {
+        x: 16px; y: 16px; width: parent.width - 32px;
+        text: root.empty-message; color: Theme.muted;
+        wrap: word-wrap;
+    }
+}
+
+// 形状/热图仍由 Rust 画进像素缓冲；电极与色标使用原生字体，避免位图字形放大。
+export component TopomapViewport inherits Rectangle {
+    in property <image> pixels;
+    in property <[MapLabel]> labels;
+    in property <string> upper-label;
+    in property <string> lower-label;
+    in property <string> unit;
+    callback raster-size-changed(float, float);
+    private property <float> raster-width: map.width / 1px;
+    private property <float> raster-height: map.height / 1px;
+    changed raster-width => { root.raster-size-changed(root.raster-width, root.raster-height); }
+    changed raster-height => { root.raster-size-changed(root.raster-width, root.raster-height); }
+    // changed 不通知初始化值；下一轮事件循环补报初始布局，之后只监听变化。
+    Timer {
+        interval: 1ms;
+        triggered => { root.raster-size-changed(root.raster-width, root.raster-height); self.running = false; }
+    }
+    min-height: 160px;
+    vertical-stretch: 1;
+    horizontal-stretch: 1;
+    map := Rectangle {
+        width: min(parent.width, parent.height * 4 / 3);
+        height: self.width * 3 / 4;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        Image { width: parent.width; height: parent.height; source: root.pixels; image-fit: fill; }
+        for label in root.labels: Text {
+            x: label.x * parent.width + 4px;
+            y: label.y * parent.height - 12px;
+            text: label.label; color: Theme.ink; font-size: 11px;
+        }
+        Text { x: parent.width * 565 / 640; y: parent.height * 50 / 480;
+            text: root.upper-label; color: Theme.muted; font-size: 11px; }
+        Text { x: parent.width * 565 / 640; y: parent.height * 400 / 480;
+            text: root.lower-label; color: Theme.muted; font-size: 11px; }
+        Text { x: parent.width * 530 / 640; y: parent.height * 425 / 480;
+            text: root.unit; color: Theme.muted; font-size: 11px; }
+    }
+}

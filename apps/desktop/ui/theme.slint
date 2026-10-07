@@ -1,0 +1,33 @@
+// 现代简约的共享视觉尺度：中性色组织信息，蓝色只承担操作和选中状态。
+import { Button } from "std-widgets.slint";
+export global Theme {
+    out property <color> canvas: #f6f7f9;
+    out property <color> surface: #ffffff;
+    out property <color> ink: #20242c;
+    out property <color> muted: #626b78;
+    out property <color> hairline: #e3e7ed;
+    out property <color> accent: #2563eb;
+    out property <length> space-small: 8px;
+    out property <length> space-medium: 16px;
+    out property <length> space-large: 24px;
+    out property <length> radius: 8px;
+}
+export component Card inherits Rectangle {
+    background: Theme.surface;
+    border-width: 1px;
+    border-color: Theme.hairline;
+    border-radius: Theme.radius;
+}
+export component SectionTitle inherits Text {
+    font-size: 16px;
+    font-weight: 600;
+    color: Theme.ink;
+}
+export component HintText inherits Text {
+    font-size: 12px;
+    color: Theme.muted;
+    wrap: word-wrap;
+}
+export component ActionButton inherits Button {
+    preferred-height: 36px;
+}
