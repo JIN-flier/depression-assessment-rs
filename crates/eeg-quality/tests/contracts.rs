@@ -18,7 +18,11 @@ fn domain_output_and_detailed_audit_roundtrip_with_identical_replay() {
     let provenance = &first.signal_quality.provenance;
     assert_eq!(provenance.generated_at, context.generated_at);
     assert_eq!(provenance.software_version, context.software_version);
-    assert_eq!(provenance.algorithm_version, "p5-qc-v1");
+    assert_eq!(provenance.algorithm_version, "p5-qc-v2");
+    assert_eq!(
+        provenance.parameters["spectral_method"],
+        "nonoverlap-periodic-hann-detrend-constant-rustfft-v1"
+    );
     assert_eq!(provenance.parameters["window_samples"], "512");
     let config: QualityConfig =
         serde_json::from_str(&provenance.parameters["configuration"]).unwrap();

@@ -61,7 +61,7 @@ impl QualityAnalyzer {
         let mut provenance = Provenance::new(
             &context.software_version,
             "eeg-quality",
-            "p5-qc-v1",
+            "p5-qc-v2",
             context.generated_at,
         )?;
         let prepared = self.prepare(input)?;
@@ -170,7 +170,7 @@ impl QualityAnalyzer {
         );
         parameters.insert(
             "spectral_method".into(),
-            "nonoverlap-periodic-hann-detrend-constant-radix2-v1".into(),
+            "nonoverlap-periodic-hann-detrend-constant-rustfft-v1".into(),
         );
         parameters.insert(
             "scoring_method".into(),

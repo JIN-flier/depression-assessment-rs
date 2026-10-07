@@ -2,6 +2,7 @@
 //! features. Non-overlapping, constant-detrended periodic-Hann periodograms are
 //! summed before taking ratios (power-weighted across epochs).
 use crate::{SpectralConfig, time_domain::Moments};
+use rustfft::{FftPlanner, num_complex::Complex};
 use std::f64::consts::TAU;
 
 pub(crate) struct SpectralMeasurements {
@@ -53,9 +54,16 @@ pub(crate) fn measure(
         .collect();
     let mut buffer = vec![Complex::default(); fft_size];
     let mut powers = vec![0.0; fft_size / 2 + 1];
+    // Plan once per channel assessment, then reuse the plan and scratch across
+    // all epochs. `process_with_scratch` avoids an allocation per FFT. These
+    // buffers belong to this call, so concurrent assessments stay independent.
+    // RustFFT's forward transform is unnormalized, matching the power-ratio
+    // convention below; no extra scaling or frequency reordering is needed.
+    let fft = FftPlanner::<f64>::new().plan_fft_forward(fft_size);
+    let mut scratch = vec![Complex::default(); fft.get_inplace_scratch_len()];
     for epoch in row.chunks_exact(window) {
         // Never bridge a missing-data gap or zero-fill missing EEG. Zero padding
-        // here extends a *valid* epoch to the radix-2 FFT length only.
+        // here extends a *valid* epoch to the selected power-of-two FFT length.
         if epoch.iter().any(|value| !value.is_finite()) {
             continue;
         }
@@ -67,7 +75,7 @@ pub(crate) fn measure(
         for (i, &value) in epoch.iter().enumerate() {
             buffer[i].re = (f64::from(value) * scale_uv - moments.mean()) * hann[i];
         }
-        fft(&mut buffer);
+        fft.process_with_scratch(&mut buffer, &mut scratch);
         for (i, power) in powers.iter_mut().enumerate() {
             let value = buffer[i];
             // A real signal's negative frequencies contribute to positive ones.
@@ -132,82 +140,56 @@ pub(crate) fn measure(
     result
 }
 
-#[derive(Clone, Copy, Default)]
-struct Complex {
-    re: f64,
-    im: f64,
-}
-
-/// Iterative radix-2 Cooley–Tukey forward FFT, unnormalized, in place.
-/// The analyzer validates a bounded power-of-two length before calling this.
-/// No feature-engine, external runtime or mutable global FFT cache is needed.
-fn fft(values: &mut [Complex]) {
-    let n = values.len();
-    let mut reversed = 0;
-    for index in 1..n {
-        let mut bit = n >> 1;
-        while reversed & bit != 0 {
-            reversed ^= bit;
-            bit >>= 1;
-        }
-        reversed ^= bit;
-        if index < reversed {
-            values.swap(index, reversed);
-        }
-    }
-    let mut width = 2;
-    loop {
-        for block in values.chunks_exact_mut(width) {
-            for i in 0..width / 2 {
-                let (sin, cos) = (-TAU * i as f64 / width as f64).sin_cos();
-                let odd = block[i + width / 2];
-                let product = Complex {
-                    re: odd.re * cos - odd.im * sin,
-                    im: odd.re * sin + odd.im * cos,
-                };
-                let even = block[i];
-                block[i] = Complex {
-                    re: even.re + product.re,
-                    im: even.im + product.im,
-                };
-                block[i + width / 2] = Complex {
-                    re: even.re - product.re,
-                    im: even.im - product.im,
-                };
-            }
-        }
-        if width == n {
-            break;
-        }
-        width *= 2;
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn fft_matches_independent_direct_dft_including_complex_phase() {
-        for n in [8, 16, 64] {
-            let input: Vec<Complex> = (0..n)
-                .map(|i| Complex {
-                    re: ((i * 13 + 3) % 17) as f64 - 8.0,
-                    im: (i % 3) as f64,
-                })
+    fn frequency_ratios_match_independent_direct_dft_with_plan_and_scratch_reuse() {
+        // Exercise the production measurement path, not just RustFFT itself.
+        // Multiple non-periodic epochs test plan/buffer reuse; a non-power-of-two
+        // epoch tests zero padding. The reference uses O(N²) DFT and no FFT API.
+        for window in [8_usize, 13, 32] {
+            let fft_size = window.next_power_of_two();
+            let row: Vec<f32> = (0..window * 3)
+                .map(|i| ((i * 13 + 3) % 17) as f32 - 2.0)
                 .collect();
-            let mut actual = input.clone();
-            fft(&mut actual);
-            for (k, value) in actual.iter().enumerate() {
-                let mut expected = Complex::default();
-                for (t, sample) in input.iter().enumerate() {
-                    let (sin, cos) = (-TAU * k as f64 * t as f64 / n as f64).sin_cos();
-                    expected.re += sample.re * cos - sample.im * sin;
-                    expected.im += sample.re * sin + sample.im * cos;
+            let config = SpectralConfig {
+                minimum_hz: 1.0,
+                line_frequency_hz: Some(5.0),
+                line_half_width_hz: 2.0,
+                high_frequency_start_hz: Some(6.0),
+            };
+            let actual = measure(&row, 1.0, 16.0, window, fft_size, &config);
+            let (mut total, mut line, mut high) = (0.0, 0.0, 0.0);
+            for epoch in row.chunks_exact(window) {
+                let mean = epoch.iter().map(|&v| f64::from(v)).sum::<f64>() / window as f64;
+                for k in 1..=fft_size / 2 {
+                    let (mut re, mut im) = (0.0, 0.0);
+                    for (t, &value) in epoch.iter().enumerate() {
+                        let hann = 0.5 - 0.5 * (TAU * t as f64 / window as f64).cos();
+                        let value = (f64::from(value) - mean) * hann;
+                        let phase = TAU * k as f64 * t as f64 / fft_size as f64;
+                        re += value * phase.cos();
+                        im -= value * phase.sin();
+                    }
+                    let power = (re * re + im * im) * if k == fft_size / 2 { 1.0 } else { 2.0 };
+                    let frequency = k as f64 * 16.0 / fft_size as f64;
+                    if frequency >= 1.0 {
+                        total += power;
+                        if (3.0..=7.0).contains(&frequency) {
+                            line += power;
+                        }
+                        if frequency >= 6.0 {
+                            high += power;
+                        }
+                    }
                 }
-                assert!((value.re - expected.re).abs() < 1e-10);
-                assert!((value.im - expected.im).abs() < 1e-10);
             }
+            assert_eq!(actual.windows, 3);
+            assert!(actual.unavailable.is_empty());
+            assert!((actual.line.unwrap() - line / total).abs() < 1e-12);
+            assert!((actual.high.unwrap() - high / total).abs() < 1e-12);
         }
     }
 }

@@ -11,11 +11,11 @@
 | `config.rs` | 可序列化检测参数、独立评分策略、资源预算、时间/版本上下文 |
 | `analyzer.rs` | 入口校验、算法调度、结果汇总、可复现来源信息 |
 | `time_domain.rs` | 缺失比例、平直片段、极端幅值、窗口方差、伪迹并集 |
-| `spectral.rs` | 质量专用周期图及工频/高频功率占比；私有 radix-2 FFT |
+| `spectral.rs` | 质量专用周期图及工频/高频功率占比；使用 RustFFT |
 | `scoring.rs` | 将观测量转成质量分数、坏通道及稳定警告码 |
 | `error.rs` | 配置、输入、单位、预算、领域及序列化错误 |
 
-运行时仅依赖 domain、chrono、serde、serde_json、thiserror，沿用现有
+运行时仅依赖 domain、chrono、serde、serde_json、thiserror、rustfft，沿用现有
 `samples[channel][sample]` 数据契约。P3/P4 仅作为集成测试的开发依赖。
 不依赖 P6 特征、数据库、UI、模型、LLM 或任何外部运行时。
 不创建线程，应用层负责在 blocking worker 中调度；可注入
@@ -84,6 +84,12 @@ fn assess(recording: &EegRecording, context: &QualityContext) -> QualityResult<S
 在分子分母中消去。方法参考 [SciPy 官方 Welch 文档](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.welch.html)，
 本实现使用非重叠窗口，仅输出质量功率占比，不输出 P6 特征或完整 PSD。
 
+FFT 使用 `rustfft::FftPlanner<f64>` 规划正向变换，复数类型直接使用库的
+`Complex<f64>`，不再维护手写 FFT。每个通道评估中复用 FFT 计划及 scratch
+缓冲，窗口间使用 `process_with_scratch`，不会每个窗口重新分配 FFT 工作区。
+根据 [RustFFT 官方文档](https://docs.rs/rustfft/6.4.1/rustfft/)，正向输出未归一化，
+且按频率升序排列，因此沿用现有单边功率及功率比例计算。
+
 - 分母：`[minimum_hz, Nyquist]` 中 FFT 频点的功率和，默认 minimum_hz = 1 Hz。
 - 工频分子：`[line_frequency_hz − half_width, line_frequency_hz + half_width]`，
   默认 50 ± 1 Hz；整个工频带必须严格位于 Nyquist 以下。
@@ -128,15 +134,20 @@ P1 的 `ChannelQuality.power_line_interference` 不是可选字段，所以缺�
 
 ## 复现和资源边界
 
-Provenance 记录应用版本、算法 `eeg-quality/p5-qc-v1`、crate 版本、调用方时间、
+Provenance 记录应用版本、算法 `eeg-quality/p5-qc-v2`、crate 版本、调用方时间、
 完整配置、检测值、实际窗口/FFT/平直最小长度、采样率/样本数、通道单位、
 输入生命周期和 P4 processing history。配置及详细结果支持 JSON 往返，
+JSON 使用 `float_roundtrip` 保留包括极小功率占比在内的 f64 值；
 配置拒绝未知字段，构造器再次验证数值。保持同一 recording、配置、上下文
 和平台即可重现完整结果；跨平台浮点结果应按容差比较。
 
+`p5-qc-v2` 将 FFT 后端从手写实现改为 RustFFT；检测规则和评分公式保持一致，
+`spectral_method` 标记 RustFFT 后端，库的精确依赖版本由 `Cargo.lock` 固定。
+FFT 实现和 CPU 指令路径变化可能导致浮点末位差异，旧结果应按原版本回放。
+
 默认预算：全矩阵 64,000,000 个样本、FFT 长度 16,384、所有 EEG 通道共
 1,000,000 个窗口。先校验乘法/FFT 长度及预算，再执行算法。
-按通道顺序处理，工作内存为该通道样本掩码和一个 FFT 窗口/功率数组，
+按通道顺序处理，工作内存为该通道样本掩码、FFT 窗口/功率数组、计划及 scratch 缓冲，
 不会复制整个 recording。预算不是整个应用的内存上限。
 
 ## 测试与验收
@@ -147,7 +158,7 @@ cargo clippy -p eeg-quality --all-targets --offline -- -D warnings
 cargo test --workspace --offline
 ```
 
-- 内部 FFT：与独立直接 DFT 比较，包含复数相位。
+- 频域核：完整功率比例与独立直接 DFT 比较，覆盖多窗口计划/工作区复用和补零。
 - `tests/algorithms.rs`：已知正弦方差、平直片段、伪迹并集、正负幅值阈值、
   高低方差、缺失/全缺失、50/60 Hz、Nyquist 单边权重、跨窗口能量加权、
   单位转换、辅助通道、尾部、低采样率/短记录/稀疏窗口及 f32 极值。

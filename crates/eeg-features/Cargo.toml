@@ -4,3 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+domain = { path = "../domain" }
+chrono = { version = "0.4.45", features = ["serde"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["float_roundtrip"] }
+thiserror = "2.0.21"
+rustfft = "6.4.1"
+
+[dev-dependencies]
+eeg-io = { path = "../eeg-io" }
+eeg-signal = { path = "../eeg-signal" }
+eeg-quality = { path = "../eeg-quality" }
