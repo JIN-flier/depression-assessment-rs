@@ -1,7 +1,7 @@
-# P8：EEG 应用层
+# P8–P9：EEG 与报告应用层
 
 本 crate 将 P2–P7 接成可测试的 V1 EEG 工作流。它不依赖 Slint，UI 不能绕过
-命令边界访问数据库或算法。P9 自然语言报告、P10 文件导出尚未接入。
+命令边界访问数据库或算法。P9 自然语言报告已接入，P10 文件导出尚未接入。
 
 ```text
 Slint callback → AppCommand → AppController（有界后台 worker）
@@ -25,9 +25,10 @@ Slint callback → AppCommand → AppController（有界后台 worker）
 - `rendering.rs`：调用 P7 准备波形/PSD/地形图 DTO；不依赖 SVG 或 Slint 像素后端。
   桌面 `raster.rs` 负责直接绘制 SharedPixelBuffer，其他宿主可使用自己的渲染器。
 - `controller.rs`：单个后台 worker、非阻塞提交、阶段事件、重复点击与关闭保护。
+- `reporting.rs`：既有分析→ReportContext；匿名通道与实体关联校验，不重算 EEG。
 - `error.rs`：应用错误和底层 source 链。
 
-`ProjectFactory`、`ProjectRepository`、`EegEngine` 都是可替换接口。数据库、算法
+`ProjectFactory`、`ProjectRepository`、`EegEngine`、`ReportNarrator` 都是可替换接口。数据库、算法
 和 UI 没有反向依赖；应用服务可以直接在 CLI 或测试中执行。
 
 ## 状态与数据规则
@@ -47,6 +48,12 @@ Slint callback → AppCommand → AppController（有界后台 worker）
    缺少至少三个不共线的已知电极等问题不会阻断特征或 PSD。图形不是源定位。
 9. 原始/派生采样数据与采集元信息保存到 P2。质量、特征与结构化分析快照当前保存在
    会话内存中；关闭/切换后重新分析。P10 再实现结果导出与归档格式。
+10. `GenerateReport` 只消费同一次成功分析的原始/处理后质量与特征，经 `report` 校验后
+    原子发布文档。Provider/校验失败保留上次有效报告；更换数据、成功重分析、质量评价
+    或修改当前受试者资料清除文档。视图与保存派生录制不会清除报告。
+
+可用 `ApplicationService::with_report_service` 注入任意 Provider。网络配置只在后台首次生成时
+初始化，Key 不经过命令或快照。详见 [LLM 依赖配置](../llm/README.md) 和 [报告合同](../report/README.md)。
 
 控制器将大型样本与分析结果以 `Arc` 传递，UI 不复制矩阵。任务串行执行，忙碌到
 终态事件被消费才解除，防止过期快照覆盖下一操作。销毁控制器后拒绝残留 dispatcher
@@ -54,7 +61,7 @@ Slint callback → AppCommand → AppController（有界后台 worker）
 
 ## 依赖与验证
 
-没有新增第三方 Cargo 包，仅声明已有本地 crate 的路径依赖。
+应用层只连接本地模块；测试复用已有 serde_json。可选 SDK 与运行时依赖由你手动添加。
 
 ```bash
 cargo test -p eeg-application --offline
@@ -64,3 +71,5 @@ cargo clippy -p eeg-application --all-targets --offline -- -D warnings
 测试覆盖真实 redb + CSV 工作流、EDF/MAT/CSV 统一命令边界、已知 10 Hz 信号的
 Alpha 主功率、降采样与处理历史、原始/派生持久化、状态清理、错误恢复、显示不重算、
 未知电极降级、过短信号、表单错误，以及注入阻塞任务证明控制器提交不阻塞 UI。
+`tests/reporting.rs` 另外覆盖真实分析到报告、输入隐私、实体关联、失败/重试、报告失效、
+报告生成不重算/不修改 EEG，以及阻塞 Provider 下非阻塞提交与 Busy 门控。

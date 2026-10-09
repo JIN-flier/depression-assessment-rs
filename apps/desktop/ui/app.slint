@@ -6,7 +6,7 @@ import { ChannelOption, ChannelPlot, MapLabel, TraceViewport, TopomapViewport } 
 export { ChannelOption, ChannelPlot, MapLabel }
 
 export component AppWindow inherits Window {
-    title: "EEG 工作台";
+    title: "EEG";
     default-font-size: 14px;
     preferred-width: 1280px; preferred-height: 900px;
     min-width: 1040px; min-height: 720px;
@@ -22,6 +22,8 @@ export component AppWindow inherits Window {
     in property <bool> subject-selected: false;
     in property <bool> recording-loaded: false;
     in property <bool> analysis-ready: false;
+    in property <bool> report-ready: false;
+    in property <string> report-text;
     in property <bool> processed-saved: false;
     in property <string> status: "打开项目目录，开始 EEG 工作流";
     in property <string> error-message;
@@ -109,6 +111,7 @@ export component AppWindow inherits Window {
             ActionButton { text: "受试者"; primary: root.page == 0; clicked => { root.page = 0; } }
             ActionButton { text: "EEG 分析"; primary: root.page == 1; clicked => { root.page = 1; } }
             ActionButton { text: "分析结果"; primary: root.page == 2; clicked => { root.page = 2; } }
+            ActionButton { text: "报告"; primary: root.page == 4; clicked => { root.page = 4; } }
             ActionButton { text: "设置"; primary: root.page == 3; clicked => { root.page = 3; } }
         }
         Card {
@@ -329,6 +332,20 @@ export component AppWindow inherits Window {
                         }
                         Text { text: "分析采用 2 秒 Hann 窗、50% 重叠 Welch PSD。默认频段为 0.5–30 Hz；信号时长和 Nyquist 不满足要求时会显示具体错误。"; wrap: word-wrap; color: Theme.muted; }
                     }
+                }
+            }
+            if root.page == 4: Card {
+                VerticalLayout {
+                    padding: 24px; spacing: 16px;
+                    SectionTitle { text: "EEG 分析报告"; }
+                    HintText { text: "点击生成时发送脱敏的质量评分与频段功率。原始 EEG、身份信息、文件路径和备注留在本地。"; }
+                    HorizontalLayout {
+                        alignment: start;
+                        ActionButton { text: root.report-ready ? "重新生成报告" : "生成报告"; primary: true; enabled: root.analysis-ready && !root.interaction-blocked; clicked => { root.action(14); } }
+                        HintText { text: "需配置 LLM；生成失败可重试。"; }
+                    }
+                    TextEdit { text: root.report-ready ? root.report-text : "完成 EEG 分析后可生成报告。"; read-only: true; }
+                    HintText { text: "报告只描述已有测量结果。更换录制或重新分析后，请重新生成报告。"; }
                 }
             }
         }

@@ -90,6 +90,8 @@ pub struct AppSnapshot {
     pub raw: Option<Arc<EegRecording>>,
     pub quality: Option<Arc<SignalQuality>>,
     pub analysis: Option<Arc<AnalysisResult>>,
+    /// 仅包含已通过 report validator 的报告；更换录制/分析/受试者信息时失效。
+    pub report: Option<Arc<report::ReportDocument>>,
     pub saved_processed: Option<RecordingId>,
     pub view: ViewRequest,
     pub plots: Arc<PlotData>,
@@ -117,4 +119,6 @@ pub enum AppCommand {
     Analyze(AnalysisRequest),
     SetView(ViewRequest),
     SaveProcessed,
+    /// 只发送既有结构化结果。Provider 配置和 Key 不通过 UI 命令传递。
+    GenerateReport,
 }

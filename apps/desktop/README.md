@@ -1,4 +1,4 @@
-# P8：Slint V1 EEG 工作台
+# P8–P9：Slint V1 EEG 工作台与 LLM 报告
 
 ```bash
 cargo run -p depression-desktop --offline
@@ -24,6 +24,9 @@ cargo run -p depression-desktop --offline
    选择地形图频段和绝对/相对功率后点击“更新显示”。
 8. 在“结构化结果”页查看参数、溯源、质量、频段功率与处理历史；可点击
    “保存处理后录制”保存独立派生录制。删除操作须先勾选确认；存在录制的受试者无法直接删除。
+9. 完成分析后进入“报告”页，点击“生成报告”。先按 [LLM 配置说明](../../crates/llm/README.md)
+   手动添加 SDK/运行时依赖并使用 `--features openai` 启动，配置 Key 和支持 JSON Schema 的模型。
+   只在点击时发送脱敏的质量/频段事实；候选校验通过后才显示，失败可重试。
 
 预处理默认 0.5–30 Hz 带通、50 Hz 陷波和去 DC；默认 Welch 为 2 秒 Hann 窗、50%
 重叠、Delta/Theta/Alpha/Beta。采样率/Nyquist 或时长不足时显示错误，修改参数后重试。
@@ -51,7 +54,8 @@ UI 解析表单、显示事件；独立 Rust 像素后端把准备好的 DTO 直
 地形图缓冲最多 8M 像素；超出预算时同比例降低超采样，避免无限分配。
 处理期间禁用重复提交，错误以界面文本展示。
 
-P8 完成到结构化 EEG 结果。报告页预留为结构化预览，P9 接入 LLM，P10 接入 PDF/DOCX/JSON/CSV。
+P9 已接入 Provider、脱敏投影、受控语言 Narrative 校验和报告页。默认构建保留离线 EEG 功能，
+未启用/配置 Provider 时报告生成明确提示错误。P10 的 PDF/DOCX/JSON/CSV 导出尚未实现。
 分析结果保存在会话内存，原始和显式保存的派生样本持久化；重启后可加载录制并重新分析。
 
 ## 源码
@@ -67,7 +71,8 @@ P8 完成到结构化 EEG 结果。报告页预留为结构化预览，P9 接入
 - `ui/plots.slint`：8 行滚动视区、地形图原生文本叠层、布局尺寸回报。
 - `../../crates/eeg-application`：独立、无 Slint 的应用服务与调度。
 
-没有新增第三方 Cargo 包；沿用已有 Slint 和 P2–P7 包。Linux 运行时需要系统已有的 Zenity 或 KDialog。
+默认构建复用已有 Slint、serde_json 和 P2–P7 包；可选的 async-openai/Tokio 依赖由你手动添加。
+Linux 运行时需要系统已有的 Zenity 或 KDialog。
 界面固定使用浅色 Fluent 组件：浅灰画布、白色面板、细分割线、清晰字号与蓝色主操作；普通面板不加阴影。
 参考 [Slint 官方组件样式文档](https://docs.slint.dev/latest/docs/slint/reference/std-widgets/style/)。
 
@@ -84,7 +89,8 @@ cargo fmt --all -- --check
 质量、预处理/重采样、特征/图形、导航、保存、错误恢复，
 并使用 12 通道数据验证默认全选、全不选/单选、真实滚轮事件与图像变化、滚动位置保持/重置，
 验证窗口放大、2× 屏幕 DPI 的真实缓冲增长、缓存复用和分析/显示参数保持，
-再渲染四个主页面和五个结果标签。不依赖显示服务器或额外测试 crate。
+验证报告生成、超时保留旧文档和重试，再渲染五个主页面和五个结果标签。
+不依赖显示服务器，不调用真实 LLM API。
 `tests/file_dialog.rs` 验证弹窗等待不阻塞、重复请求保护和取消/错误后的重试；
 模块单元测试检查平台命令参数、扩展名识别、原始路径字节及取消与失败的区分。
 `raster` 模块单元测试检查超量程线段的真实裁剪、单采样点、幅度缩放、常量 PSD、

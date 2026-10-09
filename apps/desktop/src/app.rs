@@ -26,8 +26,15 @@ impl DesktopApp {
     pub fn with_file_dialog(
         provider: Arc<dyn NativeFileDialog>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::with_service_and_file_dialog(ApplicationService::default(), provider)
+    }
+    /// 宿主可替换应用服务/报告 Provider；无显示服务器的集成测试也使用真实回调链。
+    pub fn with_service_and_file_dialog(
+        service: ApplicationService,
+        provider: Arc<dyn NativeFileDialog>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let window = AppWindow::new()?;
-        let controller = AppController::start(ApplicationService::default())?;
+        let controller = AppController::start(service)?;
         let state = Rc::new(RefCell::new(AppSnapshot::default()));
         let renderer = Rc::new(RefCell::new(PlotRenderer::default()));
         let reporter = renderer.clone();
@@ -530,6 +537,12 @@ pub fn command_from_form(
             Ok(AppCommand::SetView(view))
         }
         8 => Ok(AppCommand::SaveProcessed),
+        14 => {
+            if state.analysis.is_none() {
+                return Err(AppError::InvalidState("请先完成 EEG 分析"));
+            }
+            Ok(AppCommand::GenerateReport)
+        }
         _ => Err(AppError::InvalidInput("未知操作".into())),
     }
 }

@@ -28,6 +28,14 @@ pub(crate) fn apply_snapshot_with_renderer(
     window.set_subject_selected(state.selected_subject.is_some());
     window.set_recording_loaded(state.raw.is_some());
     window.set_analysis_ready(state.analysis.is_some());
+    window.set_report_ready(state.report.is_some());
+    window.set_report_text(
+        state
+            .report
+            .as_ref()
+            .map_or(String::new(), |report| report.plain_text())
+            .into(),
+    );
     window.set_processed_saved(state.saved_processed.is_some());
     window.set_confirm_delete(false);
     window.set_subject_items(strings(state.subjects.iter().map(|s| {

@@ -32,7 +32,7 @@ dev-dependencies，用于工作流测试和示例。服务与渲染器都是 `Se
 
 ## 使用
 
-```rust,ignore
+```rust
 use eeg_visualization::*;
 
 let service: Box<dyn EegVisualizer> = Box::new(VisualizationService::default());

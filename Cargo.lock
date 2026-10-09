@@ -939,6 +939,7 @@ name = "depression-desktop"
 version = "0.1.0"
 dependencies = [
  "eeg-application",
+ "serde_json",
  "slint",
  "slint-build",
 ]
@@ -1090,6 +1091,9 @@ dependencies = [
  "eeg-quality",
  "eeg-signal",
  "eeg-visualization",
+ "llm",
+ "report",
+ "serde_json",
  "storage",
 ]
 
@@ -2700,6 +2704,10 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 [[package]]
 name = "llm"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "lock_api"
@@ -3901,6 +3909,12 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 [[package]]
 name = "report"
 version = "0.1.0"
+dependencies = [
+ "domain",
+ "llm",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "resvg"

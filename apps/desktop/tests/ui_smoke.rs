@@ -24,6 +24,23 @@ use std::{
 };
 
 type Choice = (DialogPurpose, Result<Option<std::path::PathBuf>, String>);
+// 唯一替身是 Provider，脱敏、validator、worker、UI 投影都走生产实现。
+struct UiNarrator(Arc<std::sync::atomic::AtomicBool>);
+impl ReportNarrator for UiNarrator {
+    fn narrate(&self, input: &NarrationInput) -> Result<String, LlmError> {
+        if self.0.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(LlmError::Timeout);
+        }
+        Ok(serde_json::json!({
+            "summary": {"text": "已有结果包括{{processed_quality_score}}。", "fact_ids": ["processed_quality_score"]},
+            "description": {"text": "测量结果如下：{{channel_1.alpha.relative}}。", "fact_ids": ["channel_1.alpha.relative"]},
+            "interpretation": input.interpretation, "limitations": input.limitations,
+        }).to_string())
+    }
+    fn provider_name(&self) -> &'static str {
+        "test"
+    }
+}
 struct ScriptedChooser(Mutex<VecDeque<Choice>>);
 impl NativeFileDialog for ScriptedChooser {
     fn select(&self, request: &DialogRequest) -> Result<Option<std::path::PathBuf>, String> {
@@ -154,7 +171,11 @@ fn slint_callbacks_complete_eeg_workflow_and_render_all_pages_without_display_se
         ),
         (DialogPurpose::EegFile, Ok(Some(input.clone()))),
     ]))));
-    let desktop = DesktopApp::with_file_dialog(chooser.clone()).unwrap();
+    let fail_report = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let service = ApplicationService::default().with_report_service(ReportService::new(Box::new(
+        UiNarrator(fail_report.clone()),
+    )));
+    let desktop = DesktopApp::with_service_and_file_dialog(service, chooser.clone()).unwrap();
     let window = desktop.window();
     window
         .window()
@@ -224,6 +245,20 @@ fn slint_callbacks_complete_eeg_workflow_and_render_all_pages_without_display_se
     window.set_target_hz("128".into());
     action(window, 6);
     assert!(window.get_analysis_ready());
+    assert!(!window.get_report_ready());
+    assert!(command_from_form(window, &AppSnapshot::default(), 14).is_err());
+    action(window, 14);
+    assert!(window.get_report_ready());
+    assert!(window.get_report_text().contains("EEG 分析报告"));
+    assert!(!window.get_report_text().contains("{{"));
+    let report_text = window.get_report_text();
+    fail_report.store(true, std::sync::atomic::Ordering::SeqCst);
+    window.invoke_action(14);
+    settle(window);
+    assert!(window.get_error_message().contains("超时"));
+    assert_eq!(window.get_report_text(), report_text);
+    fail_report.store(false, std::sync::atomic::Ordering::SeqCst);
+    action(window, 14);
     assert!(window.get_has_psd());
     assert!(window.get_has_topomap());
     assert!(window.get_band_summary().contains("Alpha"));
@@ -412,7 +447,7 @@ fn slint_callbacks_complete_eeg_workflow_and_render_all_pages_without_display_se
         fs::create_dir_all(path).unwrap();
     }
     let mut previous_header = None;
-    for page in 0..4 {
+    for page in 0..5 {
         window.set_page(page);
         slint::platform::update_timers_and_animations();
         let header = render(
@@ -461,6 +496,8 @@ fn slint_callbacks_complete_eeg_workflow_and_render_all_pages_without_display_se
     // 空快照必须清掉旧结果和图像。
     depression_desktop::apply_snapshot(window, &AppSnapshot::default()).unwrap();
     assert!(!window.get_analysis_ready());
+    assert!(!window.get_report_ready());
+    assert!(window.get_report_text().is_empty());
     assert!(!window.get_has_psd());
     assert_eq!(window.get_waveform_rows().row_count(), 0);
     assert_eq!(window.get_psd_rows().row_count(), 0);

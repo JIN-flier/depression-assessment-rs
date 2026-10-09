@@ -3,7 +3,7 @@ name = "eeg-application"
 version = "0.1.0"
 edition = "2024"
 
-# P8 只连接已有本地模块，不增加第三方 Cargo 包。
+# 应用层只连接本地模块，SDK/Tokio 被 llm 的可选适配器隔离。
 [dependencies]
 domain = { path = "../domain" }
 storage = { path = "../storage" }
@@ -12,3 +12,12 @@ eeg-signal = { path = "../eeg-signal" }
 eeg-quality = { path = "../eeg-quality" }
 eeg-features = { path = "../eeg-features" }
 eeg-visualization = { path = "../eeg-visualization" }
+llm = { path = "../llm" }
+report = { path = "../report" }
+
+[features]
+default = []
+openai = ["llm/openai"]
+
+[dev-dependencies]
+serde_json = "1.0.151"

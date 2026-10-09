@@ -26,6 +26,7 @@ pub struct ApplicationService {
     engine: Box<dyn EegEngine>,
     project: Option<Box<dyn ProjectRepository>>,
     state: AppSnapshot,
+    reports: Option<ReportService>,
 }
 impl Default for ApplicationService {
     fn default() -> Self {
@@ -39,10 +40,16 @@ impl ApplicationService {
             engine,
             project: None,
             state: AppSnapshot::default(),
+            reports: None,
         }
     }
     pub fn snapshot(&self) -> AppSnapshot {
         self.state.clone()
+    }
+    /// 注入报告服务用于离线测试或其他 Provider，不改变算法/仓库依赖。
+    pub fn with_report_service(mut self, reports: ReportService) -> Self {
+        self.reports = Some(reports);
+        self
     }
     fn project(&self) -> AppResult<&dyn ProjectRepository> {
         self.project
@@ -59,6 +66,7 @@ impl ApplicationService {
         self.state.raw = None;
         self.state.quality = None;
         self.state.analysis = None;
+        self.state.report = None;
         self.state.saved_processed = None;
         self.state.view = ViewRequest::default();
         self.state.plots = Arc::new(PlotData::default());
@@ -136,6 +144,9 @@ impl ApplicationService {
                     .map_err(|e| AppError::service("更新受试者", e))?;
                 if let Some(old) = self.state.subjects.iter_mut().find(|s| s.id == id) {
                     *old = subject;
+                }
+                if self.state.selected_subject == Some(id) {
+                    self.state.report = None;
                 }
             }
             AppCommand::DeleteSubject(id) => {
@@ -218,6 +229,7 @@ impl ApplicationService {
                 progress("原始质量评价");
                 let quality = self.engine.quality(self.raw()?, &config)?;
                 self.state.quality = Some(Arc::new(quality));
+                self.state.report = None;
             }
             AppCommand::Analyze(request) => {
                 // 始终从选中的原始/已载入录制出发，不对上次分析输出重复滤波。
@@ -233,6 +245,7 @@ impl ApplicationService {
                 let plots = self.engine.plots(self.raw()?, Some(&analysis), &view)?;
                 self.state.quality = Some(Arc::new(analysis.raw_quality.clone()));
                 self.state.analysis = Some(Arc::new(analysis));
+                self.state.report = None;
                 self.state.saved_processed = None;
                 self.state.view = view;
                 self.state.plots = Arc::new(plots);
@@ -257,6 +270,34 @@ impl ApplicationService {
                     self.state.saved_processed = Some(analysis.processed.id);
                     self.refresh_recordings()?;
                 }
+            }
+            AppCommand::GenerateReport => {
+                let raw = self.raw()?;
+                let subject = self
+                    .state
+                    .subjects
+                    .iter()
+                    .find(|s| s.id == raw.subject_id)
+                    .ok_or(AppError::InvalidState("录制对应的受试者不存在"))?;
+                let analysis = self
+                    .state
+                    .analysis
+                    .as_deref()
+                    .ok_or(AppError::InvalidState("请先完成 EEG 分析"))?;
+                progress("准备脱敏的结构化报告事实");
+                let context = build_v1_report_context(subject, raw.id, analysis)?;
+                if self.reports.is_none() {
+                    self.reports = Some(crate::reporting::configured_report_service()?);
+                }
+                progress("LLM 生成报告并校验事实引用");
+                let document = self
+                    .reports
+                    .as_ref()
+                    .expect("initialized report service")
+                    .generate(context)
+                    .map_err(|e| AppError::service("报告生成", e))?;
+                // 原子发布：超时、Provider 失败或校验失败均保留上次成功文档和分析。
+                self.state.report = Some(Arc::new(document));
             }
         }
         Ok(self.snapshot())

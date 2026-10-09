@@ -10,6 +10,7 @@ mod error;
 mod forms;
 mod model;
 mod rendering;
+mod reporting;
 mod service;
 
 pub use controller::{AppController, AppEvent, CommandDispatcher};
@@ -26,5 +27,8 @@ pub use eeg_visualization::{
 pub use engine::{CoreEngine, EegEngine};
 pub use error::{AppError, AppResult};
 pub use forms::{ImportForm, ProcessingForm, SubjectForm};
+pub use llm::{LlmError, NarrationInput, ReportNarrator};
 pub use model::*;
+pub use report::{ReportDocument, ReportService};
+pub use reporting::build_v1_report_context;
 pub use service::{ApplicationService, ProjectFactory, ProjectRepository, RedbProjectFactory};
