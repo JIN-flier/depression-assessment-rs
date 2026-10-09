@@ -1,7 +1,7 @@
-# P8–P9：EEG 与报告应用层
+# P8–P10：EEG 与报告应用层
 
 本 crate 将 P2–P7 接成可测试的 V1 EEG 工作流。它不依赖 Slint，UI 不能绕过
-命令边界访问数据库或算法。P9 自然语言报告已接入，P10 文件导出尚未接入。
+命令边界访问数据库或算法。P9 自然语言报告和 P10 四格式文件导出均已接入。
 
 ```text
 Slint callback → AppCommand → AppController（有界后台 worker）
@@ -47,7 +47,7 @@ Slint callback → AppCommand → AppController（有界后台 worker）
 8. 地形图使用全部参与分析的导联、19 导联二维示意坐标；未知位置显式跳过并提示。
    缺少至少三个不共线的已知电极等问题不会阻断特征或 PSD。图形不是源定位。
 9. 原始/派生采样数据与采集元信息保存到 P2。质量、特征与结构化分析快照当前保存在
-   会话内存中；关闭/切换后重新分析。P10 再实现结果导出与归档格式。
+   会话内存中；关闭/切换后重新分析。P10 可以通过 JSON / CSV 导出完整结果归档。
 10. `GenerateReport` 只消费同一次成功分析的原始/处理后质量与特征，经 `report` 校验后
     原子发布文档。Provider/校验失败保留上次有效报告；更换数据、成功重分析、质量评价
     或修改当前受试者资料清除文档。视图与保存派生录制不会清除报告。
@@ -61,7 +61,7 @@ Slint callback → AppCommand → AppController（有界后台 worker）
 
 ## 依赖与验证
 
-应用层只连接本地模块；测试复用已有 serde_json。可选 SDK 与运行时依赖由你手动添加。
+应用层只连接本地模块；测试复用已有 serde_json。可选 SDK 与运行时依赖由 `openai` 功能启用。
 
 ```bash
 cargo test -p eeg-application --offline
@@ -73,3 +73,20 @@ Alpha 主功率、降采样与处理历史、原始/派生持久化、状态清�
 未知电极降级、过短信号、表单错误，以及注入阻塞任务证明控制器提交不阻塞 UI。
 `tests/reporting.rs` 另外覆盖真实分析到报告、输入隐私、实体关联、失败/重试、报告失效、
 报告生成不重算/不修改 EEG，以及阻塞 Provider 下非阻塞提交与 Busy 门控。
+
+## P10 导出边界
+
+`ExportReport(ExportRequest)` 与其他任务共用后台 worker、Busy 门控和终态事件。
+`exporting.rs` 把当前 subject / raw / 成功分析映射成无样本 `ExportBundle`，
+不执行算法、数据库查询或网络请求。JSON / CSV 在分析后即可导出；PDF / DOCX
+另外要求当前已校验报告。可通过 `with_report_exporter` 替换文件后端，测试不需
+依赖 UI 或文件选择器。输出合同与字体配置见 [report/README.md](../report/README.md)。
+
+只有文件完整发布后才更新 `last_export` 回执，格式错误、字体错误、磁盘错误或
+已有文件冲突保留原始样本、分析、正文、绘图和旧回执；重试可选择新文件名。
+切换数据或成功重新分析会清除回执，单纯改变视图或保存派生录制保留它。
+应用层无需添加 Cargo 包。
+
+`tests/exporting.rs` 覆盖四格式真实文件、完整 JSON 指标/参数等值、CSV 公式转义、
+陈旧正文与跨实体拒绝、缺字体/无报告失败、写入失败清理、并发禁止覆盖、权限、
+成功重试，以及注入阻塞 exporter 证明调度不会阻塞 UI。

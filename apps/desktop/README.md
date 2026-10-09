@@ -1,4 +1,4 @@
-# P8–P9：Slint V1 EEG 工作台与 LLM 报告
+# P8–P10：Slint V1 EEG 工作台与 LLM 报告
 
 ```bash
 cargo run -p depression-desktop --offline
@@ -25,7 +25,7 @@ cargo run -p depression-desktop --offline
 8. 在“结构化结果”页查看参数、溯源、质量、频段功率与处理历史；可点击
    “保存处理后录制”保存独立派生录制。删除操作须先勾选确认；存在录制的受试者无法直接删除。
 9. 完成分析后进入“报告”页，点击“生成报告”。先按 [LLM 配置说明](../../crates/llm/README.md)
-   手动添加 SDK/运行时依赖并使用 `--features openai` 启动，配置 Key 和支持 JSON Schema 的模型。
+   使用 `--features openai` 启动，配置 Key 和支持 JSON Schema 的模型。
    只在点击时发送脱敏的质量/频段事实；候选校验通过后才显示，失败可重试。
 
 预处理默认 0.5–30 Hz 带通、50 Hz 陷波和去 DC；默认 Welch 为 2 秒 Hann 窗、50%
@@ -55,7 +55,7 @@ UI 解析表单、显示事件；独立 Rust 像素后端把准备好的 DTO 直
 处理期间禁用重复提交，错误以界面文本展示。
 
 P9 已接入 Provider、脱敏投影、受控语言 Narrative 校验和报告页。默认构建保留离线 EEG 功能，
-未启用/配置 Provider 时报告生成明确提示错误。P10 的 PDF/DOCX/JSON/CSV 导出尚未实现。
+未启用/配置 Provider 时报告生成明确提示错误。P10 已接入 PDF / DOCX / JSON / CSV 导出。
 分析结果保存在会话内存，原始和显式保存的派生样本持久化；重启后可加载录制并重新分析。
 
 ## 源码
@@ -71,7 +71,7 @@ P9 已接入 Provider、脱敏投影、受控语言 Narrative 校验和报告页
 - `ui/plots.slint`：8 行滚动视区、地形图原生文本叠层、布局尺寸回报。
 - `../../crates/eeg-application`：独立、无 Slint 的应用服务与调度。
 
-默认构建复用已有 Slint、serde_json 和 P2–P7 包；可选的 async-openai/Tokio 依赖由你手动添加。
+默认构建复用已有 Slint、serde_json 和 P2–P7 包；`openai` 功能启用可选的 async-openai/Tokio 依赖。
 Linux 运行时需要系统已有的 Zenity 或 KDialog。
 界面固定使用浅色 Fluent 组件：浅灰画布、白色面板、细分割线、清晰字号与蓝色主操作；普通面板不加阴影。
 参考 [Slint 官方组件样式文档](https://docs.slint.dev/latest/docs/slint/reference/std-widgets/style/)。
@@ -104,3 +104,20 @@ cargo fmt --all -- --check
 ```bash
 P8_UI_PREVIEW_DIR=/tmp/p8-preview cargo test -p depression-desktop --test ui_smoke --offline
 ```
+
+## P10 文件导出
+
+完成分析后进入“报告”页，选择格式并点击“导出文件”，在系统保存弹窗选择
+目录和文件名。JSON / CSV 无需调用 LLM；PDF / DOCX 使用当前已校验报告，
+同时包含采集信息、导联序号映射、质量/频段功率和处理溯源附录。
+导出完成显示实际路径与字节数。取消、选择错误扩展名或写入失败可以重试，
+已有文件不会被覆盖，请选择新的文件名。弹窗和文件编码均在后台线程运行。
+
+PDF 需要支持中文的可嵌入 TrueType `.ttf`；自动检测失败时设置
+`EEG_REPORT_FONT=/path/to/font.ttf`。字体要求、归档字段和科研 CSV 读取合同详见
+[report/README.md](../../crates/report/README.md)。本次无需新增 Cargo 依赖。
+
+Linux 保存弹窗使用 Zenity `--save` / KDialog `--getsavefilename`；Windows 使用
+SaveFileDialog；macOS 使用 choose file name。Windows/macOS 尚未实机验证。
+`ui_smoke` 现已通过真实 Slint 回调验证离线 JSON / CSV 导出、重复弹窗门控、
+取消、保存器失败、扩展名错误、已有目标拒绝，以及 DOCX 重试成功且正文保持。

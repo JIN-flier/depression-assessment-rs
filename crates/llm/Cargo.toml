@@ -6,8 +6,10 @@ edition = "2024"
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+async-openai = { version = "=0.42.1", features = ["chat-completion"], optional = true }
+tokio = { version = "1.50", features = ["rt", "time", "net"], optional = true }
 
-# 新包由用户手动添加，准确配置见 README.md。默认不编译 SDK 适配器。
+# 默认构建不启用 SDK；openai 功能同时启用适配器及其可选依赖。
 [features]
 default = []
-openai = []
+openai = ["dep:async-openai", "dep:tokio"]

@@ -92,6 +92,8 @@ pub struct AppSnapshot {
     pub analysis: Option<Arc<AnalysisResult>>,
     /// 仅包含已通过 report validator 的报告；更换录制/分析/受试者信息时失效。
     pub report: Option<Arc<report::ReportDocument>>,
+    /// 最近一次成功文件发布；失败保持原回执，更换数据时清除。
+    pub last_export: Option<report::export::ExportReceipt>,
     pub saved_processed: Option<RecordingId>,
     pub view: ViewRequest,
     pub plots: Arc<PlotData>,
@@ -121,4 +123,6 @@ pub enum AppCommand {
     SaveProcessed,
     /// 只发送既有结构化结果。Provider 配置和 Key 不通过 UI 命令传递。
     GenerateReport,
+    /// JSON / CSV 只需分析；PDF / DOCX 另需已校验 Narrative。
+    ExportReport(report::export::ExportRequest),
 }

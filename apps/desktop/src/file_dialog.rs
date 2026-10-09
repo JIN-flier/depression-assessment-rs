@@ -19,6 +19,8 @@ use std::{
 pub enum DialogPurpose {
     ProjectDirectory,
     EegFile,
+    /// 保存格式随请求固定；UI 修改下拉框不能改变已打开弹窗的任务。
+    Export(eeg_application::ExportFormat),
 }
 
 #[derive(Debug, Clone)]
@@ -124,6 +126,7 @@ fn title(purpose: DialogPurpose) -> &'static str {
     match purpose {
         DialogPurpose::ProjectDirectory => "选择 EEG 项目目录",
         DialogPurpose::EegFile => "选择 EEG 文件",
+        DialogPurpose::Export(_) => "保存 EEG 分析结果",
     }
 }
 
@@ -139,10 +142,23 @@ fn zenity_command(request: &DialogRequest) -> Command {
             command.arg("--file-filter=EEG 文件 | *.edf *.EDF *.csv *.CSV *.mat *.MAT");
             command.arg("--file-filter=所有文件 | *");
         }
+        DialogPurpose::Export(format) => {
+            command.arg("--save");
+            command.arg(format!(
+                "--file-filter={} 文件 | *.{}",
+                format.extension().to_uppercase(),
+                format.extension()
+            ));
+        }
     }
     if let Some(directory) = &request.initial_directory {
         // PathBuf::join("") 保留目录末尾分隔符，避免选择器将目录名当成文件名。
-        command.arg("--filename").arg(directory.join(""));
+        command.arg("--filename").arg(match request.purpose {
+            DialogPurpose::Export(format) => {
+                directory.join(format!("eeg-report.{}", format.extension()))
+            }
+            _ => directory.join(""),
+        });
     }
     command
 }
@@ -156,6 +172,7 @@ fn system_select(request: &DialogRequest) -> Result<Option<PathBuf>, String> {
             command.arg(match request.purpose {
                 DialogPurpose::ProjectDirectory => "--getexistingdirectory",
                 DialogPurpose::EegFile => "--getopenfilename",
+                DialogPurpose::Export(_) => "--getsavefilename",
             });
             command.arg(
                 request
@@ -163,8 +180,18 @@ fn system_select(request: &DialogRequest) -> Result<Option<PathBuf>, String> {
                     .as_deref()
                     .unwrap_or_else(|| std::path::Path::new(".")),
             );
-            if request.purpose == DialogPurpose::EegFile {
-                command.arg("EEG 文件 (*.edf *.EDF *.csv *.CSV *.mat *.MAT)");
+            match request.purpose {
+                DialogPurpose::EegFile => {
+                    command.arg("EEG 文件 (*.edf *.EDF *.csv *.CSV *.mat *.MAT)");
+                }
+                DialogPurpose::Export(format) => {
+                    command.arg(format!(
+                        "{} 文件 (*.{})",
+                        format.extension(),
+                        format.extension()
+                    ));
+                }
+                _ => {}
             }
             command.args(["--title", title(request.purpose)]);
             command.output().map_err(|e| {
@@ -190,9 +217,16 @@ fn system_select(request: &DialogRequest) -> Result<Option<PathBuf>, String> {
         DialogPurpose::EegFile => {
             "on run argv\nset p to choose file with prompt (item 1 of argv) of type {\"edf\", \"csv\", \"mat\"}\nreturn POSIX path of p\nend run"
         }
+        DialogPurpose::Export(_) => {
+            "on run argv\nset p to choose file name with prompt (item 1 of argv) default name (item 2 of argv)\nreturn POSIX path of p\nend run"
+        }
+    };
+    let default_name = match request.purpose {
+        DialogPurpose::Export(format) => format!("eeg-report.{}", format.extension()),
+        _ => String::new(),
     };
     let output = Command::new("osascript")
-        .args(["-e", script, title(request.purpose)])
+        .args(["-e", script, title(request.purpose), &default_name])
         .output()
         .map_err(|e| format!("无法打开系统文件选择器：{e}"))?;
     decode_output(output, None, true)
@@ -211,10 +245,17 @@ if ($env:EEG_DIALOG_PURPOSE -eq 'project') {
     if ($env:EEG_DIALOG_INITIAL) { $dialog.SelectedPath = $env:EEG_DIALOG_INITIAL }
     if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::WriteLine($dialog.SelectedPath) }
 } else {
-    $dialog = New-Object System.Windows.Forms.OpenFileDialog
+    if ($env:EEG_DIALOG_PURPOSE -eq 'export') {
+        $dialog = New-Object System.Windows.Forms.SaveFileDialog
+        $dialog.Filter = $env:EEG_DIALOG_FILTER
+        $dialog.FileName = $env:EEG_DIALOG_NAME
+        $dialog.OverwritePrompt = $false
+    } else {
+        $dialog = New-Object System.Windows.Forms.OpenFileDialog
+        $dialog.Filter = 'EEG (*.edf;*.csv;*.mat)|*.edf;*.csv;*.mat'
+        $dialog.Multiselect = $false
+    }
     $dialog.Title = $env:EEG_DIALOG_TITLE
-    $dialog.Filter = 'EEG (*.edf;*.csv;*.mat)|*.edf;*.csv;*.mat'
-    $dialog.Multiselect = $false
     if ($env:EEG_DIALOG_INITIAL) { $dialog.InitialDirectory = $env:EEG_DIALOG_INITIAL }
     if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::WriteLine($dialog.FileName) }
 }
@@ -228,12 +269,27 @@ $dialog.Dispose()
         .env("EEG_DIALOG_TITLE", title(request.purpose))
         .env(
             "EEG_DIALOG_PURPOSE",
-            if request.purpose == DialogPurpose::ProjectDirectory {
-                "project"
-            } else {
-                "eeg"
+            match request.purpose {
+                DialogPurpose::ProjectDirectory => "project",
+                DialogPurpose::EegFile => "eeg",
+                DialogPurpose::Export(_) => "export",
             },
         );
+    if let DialogPurpose::Export(format) = request.purpose {
+        command.env(
+            "EEG_DIALOG_FILTER",
+            format!(
+                "{} (*.{})|*.{}",
+                format.extension(),
+                format.extension(),
+                format.extension()
+            ),
+        );
+        command.env(
+            "EEG_DIALOG_NAME",
+            format!("eeg-report.{}", format.extension()),
+        );
+    }
     if let Some(directory) = &request.initial_directory {
         command.env("EEG_DIALOG_INITIAL", directory);
     } else {
@@ -380,5 +436,32 @@ mod tests {
             initial_directory: None,
         });
         assert!(command.get_args().any(|a| a == "--directory"));
+    }
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn save_dialog_uses_format_filter_and_filename_without_shell_interpolation() {
+        for format in [
+            eeg_application::ExportFormat::Pdf,
+            eeg_application::ExportFormat::Docx,
+            eeg_application::ExportFormat::Json,
+            eeg_application::ExportFormat::Csv,
+        ] {
+            let request = DialogRequest {
+                purpose: DialogPurpose::Export(format),
+                initial_directory: Some(PathBuf::from("/tmp/a folder;$(echo no)")),
+            };
+            let command = zenity_command(&request);
+            let args: Vec<_> = command.get_args().map(|s| s.to_string_lossy()).collect();
+            assert!(args.iter().any(|a| a == "--save"));
+            assert!(
+                args.iter()
+                    .any(|a| a.ends_with(&format!("eeg-report.{}", format.extension())))
+            );
+            assert!(
+                args.iter()
+                    .any(|a| a.contains(&format!("*.{}", format.extension())))
+            );
+            assert!(!args.iter().any(|a| a == "--directory"));
+        }
     }
 }

@@ -247,11 +247,79 @@ fn slint_callbacks_complete_eeg_workflow_and_render_all_pages_without_display_se
     assert!(window.get_analysis_ready());
     assert!(!window.get_report_ready());
     assert!(command_from_form(window, &AppSnapshot::default(), 14).is_err());
+    // 分析后即可离线导出 JSON；弹窗格式由打开时的请求固定。
+    chooser.0.lock().unwrap().extend([
+        (
+            DialogPurpose::Export(ExportFormat::Json),
+            Ok(Some(project.join("ui-results.json"))),
+        ),
+        (DialogPurpose::Export(ExportFormat::Json), Ok(None)),
+        (
+            DialogPurpose::Export(ExportFormat::Json),
+            Ok(Some(project.join("ui-results.json"))),
+        ),
+        (
+            DialogPurpose::Export(ExportFormat::Csv),
+            Ok(Some(project.join("ui-results.csv"))),
+        ),
+    ]);
+    window.set_export_format_index(2);
+    window.invoke_choose_export();
+    window.invoke_choose_export(); // pending 门控拒绝重复弹窗
+    window.set_export_format_index(0); // 已发出的保存任务仍是 JSON
+    wait(window);
+    assert!(project.join("ui-results.json").is_file());
+    assert!(window.get_status().contains("已导出"));
+    let original = fs::read(project.join("ui-results.json")).unwrap();
+    window.set_export_format_index(2);
+    window.invoke_choose_export();
+    wait(window);
+    assert!(window.get_status().contains("已取消"));
+    window.invoke_choose_export();
+    settle(window);
+    assert!(window.get_error_message().contains("目标文件已存在"));
+    assert_eq!(fs::read(project.join("ui-results.json")).unwrap(), original);
+    assert!(window.get_analysis_ready());
+    window.set_export_format_index(3);
+    window.invoke_choose_export();
+    wait(window);
+    assert!(project.join("ui-results.csv").is_file());
     action(window, 14);
     assert!(window.get_report_ready());
     assert!(window.get_report_text().contains("EEG 分析报告"));
     assert!(!window.get_report_text().contains("{{"));
     let report_text = window.get_report_text();
+    chooser.0.lock().unwrap().extend([
+        (
+            DialogPurpose::Export(ExportFormat::Docx),
+            Err("injected save failure".into()),
+        ),
+        (
+            DialogPurpose::Export(ExportFormat::Docx),
+            Ok(Some(project.join("wrong-extension.pdf"))),
+        ),
+        (
+            DialogPurpose::Export(ExportFormat::Docx),
+            Ok(Some(project.join("ui-report.docx"))),
+        ),
+    ]);
+    window.set_export_format_index(1);
+    window.invoke_choose_export();
+    settle(window);
+    assert!(window.get_error_message().contains("injected save failure"));
+    assert_eq!(window.get_report_text(), report_text);
+    window.invoke_choose_export();
+    settle(window);
+    assert!(window.get_error_message().contains("扩展名"));
+    assert!(!project.join("wrong-extension.pdf").exists());
+    window.invoke_choose_export();
+    wait(window);
+    assert!(
+        fs::read(project.join("ui-report.docx"))
+            .unwrap()
+            .starts_with(b"PK\x03\x04")
+    );
+    assert_eq!(window.get_report_text(), report_text);
     fail_report.store(true, std::sync::atomic::Ordering::SeqCst);
     window.invoke_action(14);
     settle(window);

@@ -91,6 +91,8 @@ export component AppWindow inherits Window {
     in-out property <string> quality-line-hz: "50";
     callback choose-project();
     callback choose-eeg();
+    callback choose-export();
+    in-out property <int> export-format-index: 0;
     callback plot-geometry(int, float, float);
     callback toggle-channel(int, bool);
     callback select-all-channels(bool);
@@ -294,7 +296,7 @@ export component AppWindow inherits Window {
                     padding: 24px; spacing: 16px;
                     SectionTitle { text: "分析结果"; }
                     TextEdit { text: root.result-summary; read-only: true; }
-                    HintText { text: "当前显示信号质量、特征与处理参数。分析结果保存在当前会话，处理后录制可单独保存。"; }
+                    HintText { text: "当前显示信号质量、特征与处理参数。可到报告页导出 JSON / CSV 归档，处理后录制可单独保存。"; }
                 }
             }
             if root.page == 3: Card {
@@ -344,6 +346,12 @@ export component AppWindow inherits Window {
                         ActionButton { text: root.report-ready ? "重新生成报告" : "生成报告"; primary: true; enabled: root.analysis-ready && !root.interaction-blocked; clicked => { root.action(14); } }
                         HintText { text: "需配置 LLM；生成失败可重试。"; }
                     }
+                    HorizontalLayout {
+                        alignment: start; spacing: 12px;
+                        ComboBox { model: ["PDF", "DOCX", "JSON", "CSV"]; current-index <=> root.export-format-index; enabled: !root.interaction-blocked; }
+                        ActionButton { text: "导出文件"; enabled: root.analysis-ready && (root.export-format-index >= 2 || root.report-ready) && !root.interaction-blocked; clicked => { root.choose-export(); } }
+                    }
+                    HintText { text: "JSON / CSV 可在分析后直接导出。PDF / DOCX 包含已校验正文与指标附录。已有文件不会被覆盖，请选择新文件名。"; }
                     TextEdit { text: root.report-ready ? root.report-text : "完成 EEG 分析后可生成报告。"; read-only: true; }
                     HintText { text: "报告只描述已有测量结果。更换录制或重新分析后，请重新生成报告。"; }
                 }

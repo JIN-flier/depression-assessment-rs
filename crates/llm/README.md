@@ -2,24 +2,24 @@
 
 `ReportNarrator` 是独立 Provider 接口。上层只提交 `NarrationInput`，返回值是尚未信任的 Narrative JSON；必须经过 `report` 的校验才能展示。这里没有 EEG、量表、模型、风险或可信度计算。
 
-## 依赖由你手动添加
+## 可选依赖与功能开关
 
-`serde` / `serde_json` 复用了工程已有的版本；本次没有把新的 SDK 包加入工作区，也没有安装任何包。默认构建能运行全部 EEG 功能与离线报告测试；点击报告生成会明确提示未配置 LLM。
+`serde` / `serde_json` 复用了工程已有的版本。SDK 依赖已在 `crates/llm/Cargo.toml` 中声明为可选依赖，由 `openai` 功能同时启用依赖与适配器。默认构建能运行全部 EEG 功能与离线报告测试；点击报告生成会明确提示未配置 LLM。
 
-在 **crates/llm/Cargo.toml 的 `[dependencies]`** 中手动加入：
+当前 **crates/llm/Cargo.toml 的 `[dependencies]`** 配置为：
 
 ```toml
 async-openai = { version = "=0.42.1", features = ["chat-completion"], optional = true }
 tokio = { version = "1.50", features = ["rt", "time", "net"], optional = true }
 ```
 
-同时把同一文件已有的 `openai = []` 修改为：
+同一文件的 `[features]` 将可选依赖关联到功能开关：
 
 ```toml
 openai = ["dep:async-openai", "dep:tokio"]
 ```
 
-其他两个 crate 已接好 feature 转发，不需要额外直接依赖 SDK：
+只下载包或运行 `cargo test --workspace` 不会自动启用此功能；测试和运行时需要显式传入 `--features openai`。其他两个 crate 已接好 feature 转发，不需要额外直接依赖 SDK：
 
 ```text
 cargo test -p llm --features openai
@@ -56,4 +56,4 @@ V1 使用事实占位符和受控连接语组织中文段落。系统原文的�
 
 默认：`cargo test -p llm` 验证 DTO、Prompt、严格 Schema、输入长度和未配置状态。
 
-手动添加依赖后：`cargo test -p llm --features openai` 验证真实 SDK 的回环 HTTP 请求、Schema、拒绝、截断、空内容、超时、HTTP 错误和配置脱敏。不需要真实 Key，不会调用付费 API。真实远端调用需要你自己的运行配置，本次没有执行。
+启用功能：`cargo test -p llm --features openai` 验证真实 SDK 的回环 HTTP 请求、Schema、拒绝、截断、空内容、超时、HTTP 错误和配置脱敏。不需要真实 Key，不会调用付费 API。真实远端调用需要你自己的运行配置。

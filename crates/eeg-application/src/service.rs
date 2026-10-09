@@ -27,6 +27,7 @@ pub struct ApplicationService {
     project: Option<Box<dyn ProjectRepository>>,
     state: AppSnapshot,
     reports: Option<ReportService>,
+    exporter: Box<dyn ReportExporter>,
 }
 impl Default for ApplicationService {
     fn default() -> Self {
@@ -41,6 +42,7 @@ impl ApplicationService {
             project: None,
             state: AppSnapshot::default(),
             reports: None,
+            exporter: Box::new(FileReportExporter::default()),
         }
     }
     pub fn snapshot(&self) -> AppSnapshot {
@@ -49,6 +51,11 @@ impl ApplicationService {
     /// 注入报告服务用于离线测试或其他 Provider，不改变算法/仓库依赖。
     pub fn with_report_service(mut self, reports: ReportService) -> Self {
         self.reports = Some(reports);
+        self
+    }
+    /// 替换文件导出后端；与 EEG engine、Provider、Repository 完全独立。
+    pub fn with_report_exporter(mut self, exporter: Box<dyn ReportExporter>) -> Self {
+        self.exporter = exporter;
         self
     }
     fn project(&self) -> AppResult<&dyn ProjectRepository> {
@@ -67,6 +74,7 @@ impl ApplicationService {
         self.state.quality = None;
         self.state.analysis = None;
         self.state.report = None;
+        self.state.last_export = None;
         self.state.saved_processed = None;
         self.state.view = ViewRequest::default();
         self.state.plots = Arc::new(PlotData::default());
@@ -147,6 +155,7 @@ impl ApplicationService {
                 }
                 if self.state.selected_subject == Some(id) {
                     self.state.report = None;
+                    self.state.last_export = None;
                 }
             }
             AppCommand::DeleteSubject(id) => {
@@ -230,6 +239,7 @@ impl ApplicationService {
                 let quality = self.engine.quality(self.raw()?, &config)?;
                 self.state.quality = Some(Arc::new(quality));
                 self.state.report = None;
+                self.state.last_export = None;
             }
             AppCommand::Analyze(request) => {
                 // 始终从选中的原始/已载入录制出发，不对上次分析输出重复滤波。
@@ -246,6 +256,7 @@ impl ApplicationService {
                 self.state.quality = Some(Arc::new(analysis.raw_quality.clone()));
                 self.state.analysis = Some(Arc::new(analysis));
                 self.state.report = None;
+                self.state.last_export = None;
                 self.state.saved_processed = None;
                 self.state.view = view;
                 self.state.plots = Arc::new(plots);
@@ -298,6 +309,18 @@ impl ApplicationService {
                     .map_err(|e| AppError::service("报告生成", e))?;
                 // 原子发布：超时、Provider 失败或校验失败均保留上次成功文档和分析。
                 self.state.report = Some(Arc::new(document));
+                self.state.last_export = None;
+            }
+            AppCommand::ExportReport(request) => {
+                progress("准备本地结果归档");
+                let bundle = build_export_bundle(&self.state)?;
+                progress("编码并写入导出文件");
+                let receipt = self
+                    .exporter
+                    .export(&bundle, &request)
+                    .map_err(|e| AppError::service("结果导出", e))?;
+                // 只有完整发布后的回执才进入快照。任何失败保留分析、报告和旧回执。
+                self.state.last_export = Some(receipt);
             }
         }
         Ok(self.snapshot())

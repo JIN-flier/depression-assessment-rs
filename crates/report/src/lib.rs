@@ -1,9 +1,10 @@
-//! P9 报告编排：ReportContext → 白名单事实 → Provider → 独立校验 → ReportDocument。
+//! P9–P10 报告编排与导出：ReportContext → 白名单事实 → Provider → 独立校验 → ReportDocument。
 //!
 //! 此 crate 不依赖 EEG 算法、Slint、数据库、OpenAI SDK 或 Tokio。输入包含计算完成的
-//! 结果；输出仅在成功校验后构造。P10 可以消费同一个文档进行导出。
+//! 结果；输出仅在成功校验后构造。P10 消费同一个文档及既有结构化分析进行四格式导出。
 #![forbid(unsafe_code)]
 mod context;
+pub mod export;
 mod validation;
 pub use context::{V1_INTERPRETATION, prepare_v1};
 pub use validation::{DraftNarrative, NarrativeSection, ValidatedNarrative, validate_narrative};

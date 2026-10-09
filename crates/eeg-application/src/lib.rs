@@ -7,6 +7,7 @@
 mod controller;
 mod engine;
 mod error;
+mod exporting;
 mod forms;
 mod model;
 mod rendering;
@@ -32,3 +33,9 @@ pub use model::*;
 pub use report::{ReportDocument, ReportService};
 pub use reporting::build_v1_report_context;
 pub use service::{ApplicationService, ProjectFactory, ProjectRepository, RedbProjectFactory};
+
+pub use exporting::build_export_bundle;
+pub use report::export::{
+    ExportBundle, ExportError, ExportFormat, ExportReceipt, ExportRequest, FileReportExporter,
+    FontOptions, ReportExporter,
+};

@@ -68,6 +68,16 @@ impl DesktopApp {
                             DialogPurpose::ProjectDirectory => {
                                 submit(&window, &dispatcher, Ok(AppCommand::OpenProject(path)));
                             }
+                            DialogPurpose::Export(format) => {
+                                submit(
+                                    &window,
+                                    &dispatcher,
+                                    Ok(AppCommand::ExportReport(ExportRequest {
+                                        destination: path,
+                                        format,
+                                    })),
+                                );
+                            }
                             DialogPurpose::EegFile => match eeg_format_index(&path) {
                                 Ok(format) => {
                                     window.set_file_path(path.to_string_lossy().as_ref().into());
@@ -115,9 +125,21 @@ impl DesktopApp {
                             ) {
                                 window.set_error_message(error.into());
                             }
+                            let export_changed = snapshot.last_export != state.borrow().last_export;
+                            if export_changed && let Some(receipt) = &snapshot.last_export {
+                                window.set_status(
+                                    format!(
+                                        "已导出：{}（{} 字节）",
+                                        receipt.destination.display(),
+                                        receipt.bytes_written
+                                    )
+                                    .into(),
+                                );
+                            } else {
+                                window.set_status("操作完成".into());
+                            }
                             *state.borrow_mut() = *snapshot;
                             window.set_busy(false);
-                            window.set_status("操作完成".into());
                         }
                         AppEvent::Failed { error, snapshot } => {
                             let mut message = error.to_string();
@@ -330,6 +352,38 @@ fn bind_dialogs(
                 DialogRequest {
                     purpose: DialogPurpose::ProjectDirectory,
                     initial_directory: snapshot.borrow().project_path.clone(),
+                },
+            );
+        }
+    });
+    let weak = window.as_weak();
+    let export_picker = dialogs.clone();
+    let export_state = state.clone();
+    window.on_choose_export(move || {
+        if let Some(window) = weak.upgrade() {
+            let format = match window.get_export_format_index() {
+                0 => ExportFormat::Pdf,
+                1 => ExportFormat::Docx,
+                2 => ExportFormat::Json,
+                3 => ExportFormat::Csv,
+                _ => {
+                    window.set_error_message("请选择导出格式".into());
+                    return;
+                }
+            };
+            let snapshot = export_state.borrow();
+            if snapshot.analysis.is_none()
+                || (format.needs_narrative() && snapshot.report.is_none())
+            {
+                window.set_error_message("请先完成分析；PDF / DOCX 还需生成报告".into());
+                return;
+            }
+            request_dialog(
+                &window,
+                &export_picker,
+                DialogRequest {
+                    purpose: DialogPurpose::Export(format),
+                    initial_directory: snapshot.project_path.clone(),
                 },
             );
         }
