@@ -131,7 +131,7 @@ pub fn build_v1_report_context(
     Ok(context)
 }
 
-/// 仅在用户点击生成报告的后台任务中读取环境变量/创建网络适配器。
+/// 仅在用户点击生成报告的后台任务中读取 .env/环境变量并创建网络适配器。
 /// 启动 EEG 工作台不需要 Key，也不会自动发送请求。
 pub(crate) fn configured_report_service() -> AppResult<report::ReportService> {
     #[cfg(feature = "openai")]

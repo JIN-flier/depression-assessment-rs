@@ -25,7 +25,8 @@ cargo run -p depression-desktop --offline
 8. 在“结构化结果”页查看参数、溯源、质量、频段功率与处理历史；可点击
    “保存处理后录制”保存独立派生录制。删除操作须先勾选确认；存在录制的受试者无法直接删除。
 9. 完成分析后进入“报告”页，点击“生成报告”。先按 [LLM 配置说明](../../crates/llm/README.md)
-   使用 `--features openai` 启动，配置 Key 和支持 JSON Schema 的模型。
+   将根目录 `.env.example` 复制为 `.env`，配置 Key 和支持 JSON Schema 的模型，
+   使用 `--features openai` 启动；程序通过 `dotenvy` 自动读取配置。
    只在点击时发送脱敏的质量/频段事实；候选校验通过后才显示，失败可重试。
 
 预处理默认 0.5–30 Hz 带通、50 Hz 陷波和去 DC；默认 Welch 为 2 秒 Hann 窗、50%

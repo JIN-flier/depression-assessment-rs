@@ -11,12 +11,13 @@
 ```toml
 async-openai = { version = "=0.42.1", features = ["chat-completion"], optional = true }
 tokio = { version = "1.50", features = ["rt", "time", "net"], optional = true }
+dotenvy = { version = "0.15.7", optional = true }
 ```
 
 同一文件的 `[features]` 将可选依赖关联到功能开关：
 
 ```toml
-openai = ["dep:async-openai", "dep:tokio"]
+openai = ["dep:async-openai", "dep:tokio", "dep:dotenvy"]
 ```
 
 只下载包或运行 `cargo test --workspace` 不会自动启用此功能；测试和运行时需要显式传入 `--features openai`。其他两个 crate 已接好 feature 转发，不需要额外直接依赖 SDK：
@@ -31,16 +32,28 @@ SDK 的 `chat-completion` feature 与 `types::chat` 路径基于 [async-openai 0
 
 ## 运行配置
 
-从启动桌面程序的环境传入：
+在工作区根目录将 `.env.example` 复制为 `.env`，填入自己的 API Key、模型名及可选配置，然后运行：
+
+```bash
+cargo run -p depression-desktop --features openai
+```
+
+`OpenAiConfig::from_env()` 使用 `dotenvy` 从启动时的当前目录向父目录查找 `.env`。
+进程环境变量优先于文件中的配置；没有 `.env` 时仍支持只通过环境变量配置。
+读取使用 `dotenv_iter()`，不修改全局进程环境，适用于后台 worker。
+`.env` 已在 `.gitignore` 中忽略；只提交不含真实凭据的 `.env.example`。
 
 | 环境变量 | 要求 |
 |---|---|
-| `OPENAI_API_KEY` | 必填；仅内存使用，不写入项目、命令、快照或错误文本 |
+| `OPENAI_API_KEY` | 必填；通过本地 `.env` 或环境变量配置，不写入 EEG 项目、命令、快照或错误文本 |
 | `EEG_LLM_MODEL` | 必填；选择有权限且支持严格 JSON Schema 的模型，不硬编码模型名 |
-| `OPENAI_API_BASE` | 可选；默认 OpenAI；自定义使用 HTTPS，测试允许 localhost / 127.0.0.1 HTTP |
+| `OPENAI_BASE_URL` | 可选；默认 OpenAI；自定义使用 HTTPS，测试允许 localhost / 127.0.0.1 HTTP；兼容旧变量 `OPENAI_API_BASE` |
 | `EEG_LLM_TIMEOUT_SECONDS` | 可选；默认 60 秒，有效范围 1–300 秒 |
 
-打开项目 → 导入 EEG → 完成分析 → 报告 → 生成报告。只有点击生成才创建适配器并发送请求。开启 feature 后也不影响未配置 Key 的 EEG 工作流；配置缺失时报告生成明确失败。修改环境变量通常需要重新启动程序。
+同一来源同时设置两个 Base URL 变量时，优先使用 `OPENAI_BASE_URL`；环境变量中的任一 Base URL 都优先于文件中的值。
+`.env` 语法错误、读取失败或配置值无效会返回脱敏的配置错误；文件缺失且必要变量未配置时返回未配置错误。
+
+打开项目 → 导入 EEG → 完成分析 → 报告 → 生成报告。只有点击生成才读取配置、创建适配器并发送请求。开启 feature 后也不影响未配置 Key 的 EEG 工作流；配置缺失时报告生成明确失败。修改 `.env` 后下次生成报告会重新读取；修改进程环境变量通常需要重新启动程序。
 
 不自动降级 Provider、不自动重试、不自动换模型。超时覆盖整次异步请求；拒绝、截断、空内容、HTTP/SDK 失败分别返回类型化错误，用户可以显式重试。服务端错误正文可能回显请求或 Key，因此错误映射不保留原文。`store=false` 是请求选项，不是对所有兼容服务的数据保留承诺。
 

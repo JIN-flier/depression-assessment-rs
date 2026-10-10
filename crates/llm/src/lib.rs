@@ -51,9 +51,9 @@ impl fmt::Display for LlmError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::NotConfigured => {
-                "未配置 LLM；请按 crates/llm/README.md 添加依赖并启用 openai 功能"
+                "未配置 LLM；请按 crates/llm/README.md 配置 .env 中的 API Key 和模型，并启用 openai 功能"
             }
-            Self::Configuration => "LLM 配置无效，请检查环境变量",
+            Self::Configuration => "LLM 配置无效，请检查 .env 或环境变量",
             Self::Request => "LLM 请求失败，请检查网络、模型权限及 API 配置后重试",
             Self::Timeout => "LLM 请求超时，可重试",
             Self::Refused => "LLM 拒绝生成报告",
